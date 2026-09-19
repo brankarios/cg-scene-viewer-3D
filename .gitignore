@@ -1,0 +1,40 @@
+# Build directories
+build/
+bin/
+out/
+cmake-build-*/
+
+# ImGui configuration file
+imgui.ini
+
+# CMake artifacts and cache
+CMakeFiles/
+CMakeCache.txt
+cmake_install.cmake
+Makefile
+*.ninja
+.ninja_log
+.ninja_deps
+
+# IDE and Editor files
+.vs/
+*.sln
+*.vcxproj*
+*.user
+.vscode/
+.idea/
+
+# OS files
+Thumbs.db
+[Dd]esktop.ini
+.DS_Store
+
+# Binaries and temporary files
+*.exe
+*.dll
+*.so
+*.dylib
+*.pdb
+*.ilk
+*.obj
+*.o

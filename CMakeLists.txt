@@ -94,7 +94,13 @@ add_subdirectory(external)
 # Ejecutable principal
 # ────────────────────────────────────────────
 
-add_executable(${PROJECT_NAME} src/main.cpp)
+add_executable(${PROJECT_NAME}
+    src/main.cpp
+    src/Shader.cpp
+    src/Mesh.cpp
+    src/Model.cpp
+    src/Camera.cpp
+)
 
 target_include_directories(${PROJECT_NAME} PRIVATE include)
 

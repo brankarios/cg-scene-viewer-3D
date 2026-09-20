@@ -1,0 +1,215 @@
+#include "Model.h"
+
+#define TINYOBJLOADER_IMPLEMENTATION
+#include "tiny_obj_loader.h"
+
+#include <glm/gtc/matrix_transform.hpp>
+#include <iostream>
+#include <map>
+#include <limits>
+#include <algorithm>
+
+// Carga de .obj con tinyobjloader 
+
+bool Model::loadFromFile(const std::string& path) {
+    tinyobj::ObjReaderConfig config;
+    config.triangulate = true; // Triangular quads y poligonos automaticamente
+    config.vertex_color = false;
+
+    tinyobj::ObjReader reader;
+    if (!reader.ParseFromFile(path, config)) {
+        if (!reader.Error().empty()) {
+            std::cerr << "TinyObjLoader Error: " << reader.Error() << std::endl;
+        }
+        return false;
+    }
+
+    if (!reader.Warning().empty()) {
+        std::cout << "TinyObjLoader Warning: " << reader.Warning() << std::endl;
+    }
+
+    const auto& attrib = reader.GetAttrib();
+    const auto& shapes = reader.GetShapes();
+    const auto& materials = reader.GetMaterials();
+
+    bool hasNormals = !attrib.normals.empty();
+
+    for (const auto& shape : shapes) {
+        Mesh mesh;
+        mesh.name = shape.name;
+
+        if (hasNormals) {
+            // ── Caso 1: El .obj incluye normales ──
+            // Deduplicar vertices usando (vertex_index, normal_index) como clave
+            std::map<std::pair<int,int>, unsigned int> uniqueVertices;
+
+            for (size_t i = 0; i < shape.mesh.indices.size(); i++) {
+                const auto& idx = shape.mesh.indices[i];
+                auto key = std::make_pair(idx.vertex_index, idx.normal_index);
+
+                if (uniqueVertices.find(key) == uniqueVertices.end()) {
+                    Vertex vertex;
+                    vertex.position = glm::vec3(
+                        attrib.vertices[3 * idx.vertex_index + 0],
+                        attrib.vertices[3 * idx.vertex_index + 1],
+                        attrib.vertices[3 * idx.vertex_index + 2]
+                    );
+                    vertex.normal = glm::vec3(
+                        attrib.normals[3 * idx.normal_index + 0],
+                        attrib.normals[3 * idx.normal_index + 1],
+                        attrib.normals[3 * idx.normal_index + 2]
+                    );
+                    uniqueVertices[key] = static_cast<unsigned int>(mesh.vertices.size());
+                    mesh.vertices.push_back(vertex);
+                }
+                mesh.indices.push_back(uniqueVertices[key]);
+            }
+        } else {
+            // ── Caso 2: Sin normales - calcularlas por promedio ──
+            // Deduplicar solo por vertex_index (smooth shading)
+            std::map<int, unsigned int> uniqueVertices;
+
+            for (size_t i = 0; i < shape.mesh.indices.size(); i++) {
+                const auto& idx = shape.mesh.indices[i];
+
+                if (uniqueVertices.find(idx.vertex_index) == uniqueVertices.end()) {
+                    Vertex vertex;
+                    vertex.position = glm::vec3(
+                        attrib.vertices[3 * idx.vertex_index + 0],
+                        attrib.vertices[3 * idx.vertex_index + 1],
+                        attrib.vertices[3 * idx.vertex_index + 2]
+                    );
+                    vertex.normal = glm::vec3(0.0f); // Se calculara despues
+                    uniqueVertices[idx.vertex_index] = static_cast<unsigned int>(mesh.vertices.size());
+                    mesh.vertices.push_back(vertex);
+                }
+                mesh.indices.push_back(uniqueVertices[idx.vertex_index]);
+            }
+
+            // Calcular normales promediando las normales de las caras
+            computeNormals(mesh.vertices, mesh.indices);
+        }
+
+        // ── Material: leer color difuso (Kd) y alfa (d) del .mtl ──
+        if (!shape.mesh.material_ids.empty() && shape.mesh.material_ids[0] >= 0) {
+            int matId = shape.mesh.material_ids[0];
+            const auto& mat = materials[matId];
+            mesh.color = glm::vec4(
+                mat.diffuse[0], mat.diffuse[1], mat.diffuse[2],
+                mat.dissolve // dissolve = 1.0 opaco, 0.0 transparente
+            );
+        }
+        // Si no hay material, se queda con el gris por defecto (0.8, 0.8, 0.8, 1.0)
+
+        meshes.push_back(std::move(mesh));
+    }
+
+    // Si no hay shapes definidos pero hay vertices sueltos, tratarlos como una sola malla
+    if (shapes.empty() && !attrib.vertices.empty()) {
+        std::cerr << "Advertencia: El archivo no tiene shapes definidos." << std::endl;
+        return false;
+    }
+
+    // Normalizar el modelo (centrar en origen y escalar a [-1, 1])
+    normalizeModel();
+
+    // Subir datos a la GPU despues de normalizar
+    for (auto& mesh : meshes) {
+        mesh.setup();
+    }
+
+    // Guardar nombre y ruta
+    filePath = path;
+    size_t lastSlash = path.find_last_of("/\\");
+    name = (lastSlash != std::string::npos) ? path.substr(lastSlash + 1) : path;
+
+    std::cout << "Modelo cargado: " << name
+              << " (" << meshes.size() << " malla(s))" << std::endl;
+
+    return true;
+}
+
+// Calculo de normales por promedio de caras 
+
+void Model::computeNormals(std::vector<Vertex>& vertices,
+                           const std::vector<unsigned int>& indices) {
+    // Reiniciar normales
+    for (auto& v : vertices) {
+        v.normal = glm::vec3(0.0f);
+    }
+
+    // Para cada triangulo, calcular la normal de la cara y acumularla
+    // en cada uno de sus 3 vertices
+    for (size_t i = 0; i < indices.size(); i += 3) {
+        Vertex& v0 = vertices[indices[i + 0]];
+        Vertex& v1 = vertices[indices[i + 1]];
+        Vertex& v2 = vertices[indices[i + 2]];
+
+        glm::vec3 edge1 = v1.position - v0.position;
+        glm::vec3 edge2 = v2.position - v0.position;
+        glm::vec3 faceNormal = glm::cross(edge1, edge2);
+
+        v0.normal += faceNormal;
+        v1.normal += faceNormal;
+        v2.normal += faceNormal;
+    }
+
+    // Normalizar cada normal acumulada
+    for (auto& v : vertices) {
+        if (glm::length(v.normal) > 0.0001f) {
+            v.normal = glm::normalize(v.normal);
+        }
+    }
+}
+
+// Normalizacion del modelo (centrar + escalar) 
+
+void Model::normalizeModel() {
+    // Encontrar el bounding box global de todas las mallas
+    glm::vec3 minBounds(std::numeric_limits<float>::max());
+    glm::vec3 maxBounds(std::numeric_limits<float>::lowest());
+
+    for (const auto& mesh : meshes) {
+        for (const auto& vertex : mesh.vertices) {
+            minBounds = glm::min(minBounds, vertex.position);
+            maxBounds = glm::max(maxBounds, vertex.position);
+        }
+    }
+
+    // Centro del bounding box
+    glm::vec3 center = (minBounds + maxBounds) * 0.5f;
+
+    // Extension maxima para escalar uniformemente
+    glm::vec3 size = maxBounds - minBounds;
+    float maxExtent = std::max({size.x, size.y, size.z});
+    float scaleFactor = (maxExtent > 0.0001f) ? 2.0f / maxExtent : 1.0f;
+
+    // Aplicar centrado y escalado a todos los vertices
+    for (auto& mesh : meshes) {
+        for (auto& vertex : mesh.vertices) {
+            vertex.position = (vertex.position - center) * scaleFactor;
+        }
+    }
+}
+
+//  Dibujo 
+
+void Model::draw(Shader& shader) const {
+    glm::mat4 modelMatrix = getModelMatrix();
+    shader.setMat4("model", modelMatrix);
+
+    for (const auto& mesh : meshes) {
+        shader.setVec4("objectColor", mesh.color);
+        mesh.draw();
+    }
+}
+
+glm::mat4 Model::getModelMatrix() const {
+    glm::mat4 model = glm::mat4(1.0f);
+    model = glm::translate(model, position);
+    model = glm::rotate(model, glm::radians(rotation.x), glm::vec3(1, 0, 0));
+    model = glm::rotate(model, glm::radians(rotation.y), glm::vec3(0, 1, 0));
+    model = glm::rotate(model, glm::radians(rotation.z), glm::vec3(0, 0, 1));
+    model = glm::scale(model, scale);
+    return model;
+}

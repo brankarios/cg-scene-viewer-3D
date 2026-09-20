@@ -5,6 +5,8 @@
 
 #include <glm/gtc/matrix_transform.hpp>
 #include <iostream>
+#include <fstream>
+#include <sstream>
 #include <map>
 #include <limits>
 #include <algorithm>
@@ -12,9 +14,17 @@
 // Carga de .obj con tinyobjloader 
 
 bool Model::loadFromFile(const std::string& path) {
+    // Directorio base para buscar archivos de materiales (.mtl / .mlt)
+    size_t lastSlash = path.find_last_of("/\\");
+    std::string baseDir = (lastSlash != std::string::npos) ? path.substr(0, lastSlash + 1) : "";
+    std::string baseName = (lastSlash != std::string::npos) ? path.substr(lastSlash + 1) : path;
+    size_t lastDot = baseName.find_last_of('.');
+    std::string nameWithoutExt = (lastDot != std::string::npos) ? baseName.substr(0, lastDot) : baseName;
+
     tinyobj::ObjReaderConfig config;
     config.triangulate = true; // Triangular quads y poligonos automaticamente
     config.vertex_color = false;
+    config.mtl_search_path = baseDir; // Buscar .mtl en la misma carpeta del .obj
 
     tinyobj::ObjReader reader;
     if (!reader.ParseFromFile(path, config)) {
@@ -120,13 +130,99 @@ bool Model::loadFromFile(const std::string& path) {
 
     // Guardar nombre y ruta
     filePath = path;
-    size_t lastSlash = path.find_last_of("/\\");
-    name = (lastSlash != std::string::npos) ? path.substr(lastSlash + 1) : path;
+    name = baseName;
+
+    // Si tinyobjloader cargó materiales, actualizar diffuseColor
+    if (!materials.empty()) {
+        diffuseColor = glm::vec4(
+            materials[0].diffuse[0],
+            materials[0].diffuse[1],
+            materials[0].diffuse[2],
+            materials[0].dissolve
+        );
+        std::cout << "Material .mtl detectado automaticamente -> Kd: ("
+                  << diffuseColor.r << ", " << diffuseColor.g << ", " << diffuseColor.b << ")" << std::endl;
+    } else {
+        // Intentar buscar archivo de material con el mismo nombre (.mtl o .mlt)
+        std::string autoMtl = baseDir + nameWithoutExt + ".mtl";
+        std::string autoMlt = baseDir + nameWithoutExt + ".mlt";
+        std::ifstream checkMtl(autoMtl);
+        if (checkMtl.is_open()) {
+            checkMtl.close();
+            loadMaterialFromFile(autoMtl);
+        } else {
+            std::ifstream checkMlt(autoMlt);
+            if (checkMlt.is_open()) {
+                checkMlt.close();
+                loadMaterialFromFile(autoMlt);
+            }
+        }
+    }
 
     std::cout << "Modelo cargado: " << name
               << " (" << meshes.size() << " malla(s))" << std::endl;
 
     return true;
+}
+
+// Carga y parseo de archivo .mtl
+
+bool Model::loadMaterialFromFile(const std::string& mtlPath) {
+    std::ifstream file(mtlPath);
+    if (!file.is_open()) {
+        std::cerr << "Error: No se pudo abrir el archivo de material: " << mtlPath << std::endl;
+        return false;
+    }
+
+    glm::vec3 kd(0.8f, 0.8f, 0.8f);
+    float alpha = 1.0f;
+    bool foundKd = false;
+
+    std::string line;
+    while (std::getline(file, line)) {
+        size_t start = line.find_first_not_of(" \t\r\n");
+        if (start == std::string::npos || line[start] == '#') continue;
+        std::string trimmed = line.substr(start);
+
+        std::stringstream ss(trimmed);
+        std::string token;
+        ss >> token;
+
+        // Color difuso (Kd r g b)
+        if (token == "Kd" || token == "kd") {
+            ss >> kd.r >> kd.g >> kd.b;
+            foundKd = true;
+        }
+        // Disolución / opacidad (d alfa)
+        else if (token == "d") {
+            ss >> alpha;
+        }
+        // Transparencia alternativa (Tr alfa -> alfa = 1 - Tr)
+        else if (token == "Tr") {
+            float tr = 0.0f;
+            ss >> tr;
+            alpha = 1.0f - tr;
+        }
+    }
+
+    if (!foundKd) {
+        std::cout << "Aviso: No se encontro etiqueta Kd en " << mtlPath << ". Se mantendran los valores actuales." << std::endl;
+        return false;
+    }
+
+    glm::vec4 newColor(kd.r, kd.g, kd.b, std::clamp(alpha, 0.0f, 1.0f));
+    setDiffuseColor(newColor);
+
+    std::cout << "Material aplicado desde " << mtlPath
+              << " -> Kd: (" << kd.r << ", " << kd.g << ", " << kd.b << ", alfa: " << alpha << ")" << std::endl;
+    return true;
+}
+
+void Model::setDiffuseColor(const glm::vec4& color) {
+    diffuseColor = color;
+    for (auto& mesh : meshes) {
+        mesh.color = color;
+    }
 }
 
 // Calculo de normales por promedio de caras 

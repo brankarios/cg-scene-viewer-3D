@@ -22,15 +22,14 @@
 #include <memory>
 #include <algorithm>
 
-// ── Modos de interacción con el mouse ──
 enum class InteractionMode {
-    Rotate,     // Rotar el objeto seleccionado
-    Translate,  // Mover el objeto en el plano de la cámara
-    Scale,      // Escalar el objeto
-    Navigate    // Solo mover/orbitar la cámara con click izquierdo
+    Rotate,     
+    Translate,  
+    Scale,      
+    Navigate    
 };
 
-// ── Variables globales para interacción y callbacks ──
+// Variables globales para interacción y callbacks 
 static Camera g_camera(glm::vec3(0.0f, 0.0f, 0.0f), 3.5f);
 static InteractionMode g_mode = InteractionMode::Rotate;
 static int g_selectedModel = 0;
@@ -59,6 +58,24 @@ std::string openFileDialog() {
     return "";
 }
 
+std::string openMaterialFileDialog() {
+#ifdef _WIN32
+    char filename[MAX_PATH] = "";
+    OPENFILENAMEA ofn = {};
+    ofn.lStructSize = sizeof(ofn);
+    ofn.lpstrFile = filename;
+    ofn.nMaxFile = MAX_PATH;
+    ofn.lpstrFilter = "Material Files (*.mtl;*.mlt)\0*.mtl;*.mlt\0All Files\0*.*\0";
+    ofn.nFilterIndex = 1;
+    ofn.Flags = OFN_PATHMUSTEXIST | OFN_FILEMUSTEXIST | OFN_NOCHANGEDIR;
+
+    if (GetOpenFileNameA(&ofn)) {
+        return std::string(filename);
+    }
+#endif
+    return "";
+}
+
 // Callback para redimensionar la ventana
 void framebuffer_size_callback(GLFWwindow* window, int width, int height) {
     glViewport(0, 0, width, height);
@@ -73,7 +90,7 @@ void scroll_callback(GLFWwindow* window, double xoffset, double yoffset) {
 }
 
 int main() {
-    // ── Inicializar GLFW ──
+    // Inicializar GLFW
     if (!glfwInit()) {
         std::cerr << "Error: No se pudo inicializar GLFW" << std::endl;
         return -1;
@@ -347,6 +364,19 @@ int main() {
                 ImGui::DragFloat3("##scale", &curModel->scale.x, 0.02f, 0.01f, 50.0f);
                 ImGui::SameLine();
                 if (ImGui::SmallButton("Reset##scale")) curModel->scale = glm::vec3(1.0f);
+
+                // Material y Color Difuso (Kd)
+                ImGui::Text("Color Difuso (Kd):");
+                if (ImGui::ColorEdit4("##kd", &curModel->diffuseColor.x)) {
+                    curModel->setDiffuseColor(curModel->diffuseColor);
+                }
+
+                if (ImGui::Button("Cargar Material (.mtl / .mlt)...")) {
+                    std::string mtlPath = openMaterialFileDialog();
+                    if (!mtlPath.empty()) {
+                        curModel->loadMaterialFromFile(mtlPath);
+                    }
+                }
 
                 if (ImGui::Button("Enfocar Camara Aqui")) {
                     g_camera.target = curModel->position;

@@ -18,8 +18,8 @@ public:
     Shader(Shader&& other) noexcept;
     Shader& operator=(Shader&& other) noexcept;
 
-    // Cargar y compilar shaders desde archivos
-    bool load(const std::string& vertexPath, const std::string& fragmentPath);
+    // Cargar y compilar shaders desde archivos (con Geometry Shader opcional)
+    bool load(const std::string& vertexPath, const std::string& fragmentPath, const std::string& geometryPath = "");
     void use() const;
 
     // Setters de uniforms

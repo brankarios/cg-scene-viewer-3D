@@ -15,6 +15,7 @@
 #include "Model.h"
 #include "Camera.h"
 #include "PickingFBO.h"
+#include "BoundingBox.h"
 
 #include <iostream>
 #include <string>
@@ -48,6 +49,17 @@ static double g_lastMouseX = 0.0;
 static double g_lastMouseY = 0.0;
 
 static PickingFBO g_pickingFBO;
+
+// Modos de Visualización y Render (Inciso 4 y 5)
+static bool g_wireframe = false;
+static bool g_showVertices = false;
+static float g_vertexSize = 5.0f;
+static bool g_showNormals = false;
+static float g_normalLength = 0.06f;
+static glm::vec4 g_normalColor(0.0f, 1.0f, 1.0f, 1.0f);
+static bool g_showBoundingBox = false;
+static bool g_depthTest = true;
+static bool g_cullFace = false;
 
 std::string openFileDialog() {
 #ifdef _WIN32
@@ -227,6 +239,22 @@ int main() {
         std::cerr << "Error: No se pudieron cargar los shaders de picking" << std::endl;
         return -1;
     }
+
+    // ── Compilar shader de normales (con Geometry Shader) ──
+    Shader normalsShader;
+    if (!normalsShader.load("shaders/normals.vert", "shaders/normals.frag", "shaders/normals.geom")) {
+        std::cerr << "Advertencia: No se pudieron cargar los shaders de normales" << std::endl;
+    }
+
+    // ── Compilar shader plano para Bounding Box y Vértices ──
+    Shader flatShader;
+    if (!flatShader.load("shaders/flat.vert", "shaders/flat.frag")) {
+        std::cerr << "Advertencia: No se pudieron cargar los shaders planos" << std::endl;
+    }
+
+    // ── Inicializar Bounding Box ──
+    BoundingBox g_boundingBox;
+    g_boundingBox.init();
 
     // ── Inicializar Framebuffer de Picking ──
     g_pickingFBO.init(1280, 720);
@@ -653,6 +681,40 @@ int main() {
 
         ImGui::Separator();
 
+        // ── Modos de Visualización (Inciso 4) ──
+        if (ImGui::CollapsingHeader("Modos de Visualizacion", ImGuiTreeNodeFlags_DefaultOpen)) {
+            ImGui::Checkbox("Modo Wireframe (Alambrico)", &g_wireframe);
+
+            ImGui::Checkbox("Visualizar Vertices", &g_showVertices);
+            if (g_showVertices) {
+                ImGui::Indent(20.0f);
+                ImGui::SliderFloat("Tamano Vertices", &g_vertexSize, 1.0f, 15.0f, "%.1f px");
+                ImGui::Unindent(20.0f);
+            }
+
+            ImGui::Checkbox("Visualizar Normales", &g_showNormals);
+            if (g_showNormals) {
+                ImGui::Indent(20.0f);
+                ImGui::SliderFloat("Longitud Normales", &g_normalLength, 0.005f, 0.3f, "%.3f");
+                ImGui::ColorEdit3("Color Normales", &g_normalColor.x);
+                ImGui::Unindent(20.0f);
+            }
+
+            ImGui::Checkbox("Visualizar Bounding Box (AABB)", &g_showBoundingBox);
+            if (g_showBoundingBox) {
+                ImGui::Indent(20.0f);
+                if (g_specificity == SelectionSpecificity::Local && g_selectedMesh >= 0) {
+                    ImGui::TextColored(ImVec4(1.0f, 0.9f, 0.0f, 1.0f), "Caja Amarilla: Submalla activa");
+                    ImGui::TextColored(ImVec4(0.2f, 0.8f, 0.2f, 1.0f), "Caja Verde: Objeto completo");
+                } else {
+                    ImGui::TextColored(ImVec4(0.0f, 1.0f, 0.2f, 1.0f), "Caja Verde: Objeto completo");
+                }
+                ImGui::Unindent(20.0f);
+            }
+        }
+
+        ImGui::Separator();
+
         // ── Ajustes de Cámara ──
         if (ImGui::CollapsingHeader("Camara y Vista", ImGuiTreeNodeFlags_DefaultOpen)) {
             ImGui::Text("Distancia: %.2f", g_camera.distance);
@@ -663,8 +725,11 @@ int main() {
             }
         }
 
-        // ── Ajustes de Render ──
-        if (ImGui::CollapsingHeader("Entorno y Luces")) {
+        // ── Ajustes y Opciones de Render (Inciso 5) ──
+        if (ImGui::CollapsingHeader("Opciones de Render")) {
+            ImGui::Checkbox("Depth Test (GL_DEPTH_TEST)", &g_depthTest);
+            ImGui::Checkbox("Back-Face Culling (GL_CULL_FACE)", &g_cullFace);
+            ImGui::Separator();
             ImGui::ColorEdit3("Color de fondo", &clearColor.x);
             ImGui::SliderFloat3("Dir. Luz", &lightDir.x, -1.0f, 1.0f);
             ImGui::ColorEdit3("Color Luz", &lightColor.x);
@@ -690,11 +755,33 @@ int main() {
 
         glViewport(0, 0, display_w, display_h);
 
+        // Control de Depth Test
+        if (g_depthTest) {
+            glEnable(GL_DEPTH_TEST);
+        } else {
+            glDisable(GL_DEPTH_TEST);
+        }
+
+        // Control de Back-Face Culling
+        if (g_cullFace) {
+            glEnable(GL_CULL_FACE);
+            glCullFace(GL_BACK);
+        } else {
+            glDisable(GL_CULL_FACE);
+        }
+
         // Limpiar pantalla visible
         glClearColor(clearColor.x, clearColor.y, clearColor.z, 1.0f);
         glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
 
-        // Activar shader y enviar uniforms
+        // Modo Wireframe vs Sólido
+        if (g_wireframe) {
+            glPolygonMode(GL_FRONT_AND_BACK, GL_LINE);
+        } else {
+            glPolygonMode(GL_FRONT_AND_BACK, GL_FILL);
+        }
+
+        // Activar shader base y enviar uniforms
         baseShader.use();
         baseShader.setMat4("view", view);
         baseShader.setMat4("projection", projection);
@@ -705,6 +792,74 @@ int main() {
         // Dibujar todos los modelos
         for (const auto& model : models) {
             model->draw(baseShader);
+        }
+
+        // Restaurar a modo sólido
+        glPolygonMode(GL_FRONT_AND_BACK, GL_FILL);
+
+        // ── 1. Visualizar Vértices ──
+        if (g_showVertices && !models.empty()) {
+            flatShader.use();
+            flatShader.setMat4("view", view);
+            flatShader.setMat4("projection", projection);
+            flatShader.setVec4("flatColor", glm::vec4(1.0f, 0.85f, 0.2f, 1.0f));
+
+            glPointSize(g_vertexSize);
+            glPolygonMode(GL_FRONT_AND_BACK, GL_POINT);
+
+            for (const auto& model : models) {
+                glm::mat4 modelMat = model->getModelMatrix();
+                for (const auto& mesh : model->meshes) {
+                    flatShader.setMat4("model", modelMat * mesh.getLocalModelMatrix());
+                    mesh.draw();
+                }
+            }
+
+            glPolygonMode(GL_FRONT_AND_BACK, GL_FILL);
+        }
+
+        // ── 2. Visualizar Normales ──
+        if (g_showNormals && !models.empty()) {
+            normalsShader.use();
+            normalsShader.setMat4("view", view);
+            normalsShader.setMat4("projection", projection);
+            normalsShader.setFloat("normalLength", g_normalLength);
+            normalsShader.setVec4("normalColor", g_normalColor);
+
+            for (const auto& model : models) {
+                glm::mat4 modelMat = model->getModelMatrix();
+                for (const auto& mesh : model->meshes) {
+                    normalsShader.setMat4("model", modelMat * mesh.getLocalModelMatrix());
+                    mesh.draw();
+                }
+            }
+        }
+
+        // ── 3. Visualizar Bounding Box (AABB) ──
+        if (g_showBoundingBox && !models.empty() && g_selectedModel >= 0 && g_selectedModel < static_cast<int>(models.size())) {
+            flatShader.use();
+            flatShader.setMat4("view", view);
+            flatShader.setMat4("projection", projection);
+
+            auto& selModel = models[g_selectedModel];
+            glm::mat4 modelMat = selModel->getModelMatrix();
+
+            bool isLocalSubmesh = (g_specificity == SelectionSpecificity::Local &&
+                                   g_selectedMesh >= 0 &&
+                                   g_selectedMesh < static_cast<int>(selModel->meshes.size()));
+
+            if (isLocalSubmesh) {
+                // AABB local de la submalla activa (Amarillo)
+                auto& curMesh = selModel->meshes[g_selectedMesh];
+                glm::mat4 meshMat = modelMat * curMesh.getLocalModelMatrix();
+                g_boundingBox.draw(flatShader, meshMat, curMesh.minBounds, curMesh.maxBounds, glm::vec4(1.0f, 0.9f, 0.0f, 1.0f));
+
+                // AABB global de todo el modelo (Verde tenue)
+                g_boundingBox.draw(flatShader, modelMat, selModel->minBounds, selModel->maxBounds, glm::vec4(0.2f, 0.7f, 0.2f, 0.4f));
+            } else {
+                // AABB global de todo el modelo (Verde brillante)
+                g_boundingBox.draw(flatShader, modelMat, selModel->minBounds, selModel->maxBounds, glm::vec4(0.0f, 1.0f, 0.2f, 1.0f));
+            }
         }
 
         // Dibujar interfaz de ImGui encima de la escena 3D

@@ -101,6 +101,7 @@ add_executable(${PROJECT_NAME}
     src/Model.cpp
     src/Camera.cpp
     src/PickingFBO.cpp
+    src/BoundingBox.cpp
 )
 
 target_include_directories(${PROJECT_NAME} PRIVATE include)

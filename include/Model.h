@@ -21,6 +21,10 @@ public:
     // Material y Color Difuso (Kd)
     glm::vec4 diffuseColor = glm::vec4(0.8f, 0.8f, 0.8f, 1.0f);
 
+    // Bounding Box (AABB global del modelo)
+    glm::vec3 minBounds = glm::vec3(0.0f);
+    glm::vec3 maxBounds = glm::vec3(0.0f);
+
     Model() = default;
 
     // Cargar modelo desde archivo .obj

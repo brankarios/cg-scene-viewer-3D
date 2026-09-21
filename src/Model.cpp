@@ -286,6 +286,15 @@ void Model::normalizeModel() {
             vertex.position = (vertex.position - center) * scaleFactor;
         }
     }
+
+    // Calcular y guardar los minBounds y maxBounds finales normalizados
+    this->minBounds = glm::vec3(std::numeric_limits<float>::max());
+    this->maxBounds = glm::vec3(std::numeric_limits<float>::lowest());
+    for (auto& mesh : meshes) {
+        mesh.computeAABB();
+        this->minBounds = glm::min(this->minBounds, mesh.minBounds);
+        this->maxBounds = glm::max(this->maxBounds, mesh.maxBounds);
+    }
 }
 
 //  Dibujo 

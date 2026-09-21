@@ -292,9 +292,10 @@ void Model::normalizeModel() {
 
 void Model::draw(Shader& shader) const {
     glm::mat4 modelMatrix = getModelMatrix();
-    shader.setMat4("model", modelMatrix);
 
     for (const auto& mesh : meshes) {
+        glm::mat4 finalMatrix = modelMatrix * mesh.getLocalModelMatrix();
+        shader.setMat4("model", finalMatrix);
         shader.setVec4("objectColor", mesh.color);
         mesh.draw();
     }

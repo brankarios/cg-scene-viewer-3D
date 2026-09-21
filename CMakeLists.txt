@@ -100,6 +100,7 @@ add_executable(${PROJECT_NAME}
     src/Mesh.cpp
     src/Model.cpp
     src/Camera.cpp
+    src/PickingFBO.cpp
 )
 
 target_include_directories(${PROJECT_NAME} PRIVATE include)

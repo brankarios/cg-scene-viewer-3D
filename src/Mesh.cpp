@@ -1,5 +1,8 @@
 #include "Mesh.h"
+#include <glm/gtc/matrix_transform.hpp>
 #include <utility>
+#include <limits>
+#include <algorithm>
 
 Mesh::~Mesh() {
     if (VAO) glDeleteVertexArrays(1, &VAO);
@@ -12,6 +15,11 @@ Mesh::Mesh(Mesh&& other) noexcept
     , indices(std::move(other.indices))
     , color(other.color)
     , name(std::move(other.name))
+    , minBounds(other.minBounds)
+    , maxBounds(other.maxBounds)
+    , position(other.position)
+    , rotation(other.rotation)
+    , scale(other.scale)
     , VAO(other.VAO), VBO(other.VBO), EBO(other.EBO)
 {
     other.VAO = other.VBO = other.EBO = 0;
@@ -28,15 +36,48 @@ Mesh& Mesh::operator=(Mesh&& other) noexcept {
         indices = std::move(other.indices);
         color = other.color;
         name = std::move(other.name);
+        minBounds = other.minBounds;
+        maxBounds = other.maxBounds;
+        position = other.position;
+        rotation = other.rotation;
+        scale = other.scale;
         VAO = other.VAO; VBO = other.VBO; EBO = other.EBO;
         other.VAO = other.VBO = other.EBO = 0;
     }
     return *this;
 }
 
+glm::mat4 Mesh::getLocalModelMatrix() const {
+    glm::vec3 center = (minBounds + maxBounds) * 0.5f;
+    glm::mat4 model = glm::mat4(1.0f);
+    // Trasladar al centro de la submalla para rotar y escalar respecto a su propio eje
+    model = glm::translate(model, position + center);
+    model = glm::rotate(model, glm::radians(rotation.x), glm::vec3(1.0f, 0.0f, 0.0f));
+    model = glm::rotate(model, glm::radians(rotation.y), glm::vec3(0.0f, 1.0f, 0.0f));
+    model = glm::rotate(model, glm::radians(rotation.z), glm::vec3(0.0f, 0.0f, 1.0f));
+    model = glm::scale(model, scale);
+    model = glm::translate(model, -center);
+    return model;
+}
+
+void Mesh::computeAABB() {
+    if (vertices.empty()) {
+        minBounds = maxBounds = glm::vec3(0.0f);
+        return;
+    }
+    minBounds = glm::vec3(std::numeric_limits<float>::max());
+    maxBounds = glm::vec3(std::numeric_limits<float>::lowest());
+    for (const auto& v : vertices) {
+        minBounds = glm::min(minBounds, v.position);
+        maxBounds = glm::max(maxBounds, v.position);
+    }
+}
+
 // Setup de buffers OpenGL 
 
 void Mesh::setup() {
+    computeAABB();
+
     glGenVertexArrays(1, &VAO);
     glGenBuffers(1, &VBO);
     glGenBuffers(1, &EBO);

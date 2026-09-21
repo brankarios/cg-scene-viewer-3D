@@ -73,20 +73,6 @@ FetchContent_Declare(
 )
 FetchContent_MakeAvailable(tinyobjloader)
 
-# ── nlohmann/json (serializar/deserializar escena) ──
-# Se descarga solo los headers (URL) en vez de clonar el repo completo (GIT),
-# porque el repo tiene archivos de test con nombres extremadamente largos
-# que superan el limite de 260 caracteres de Windows.
-FetchContent_Declare(
-    json
-    URL https://github.com/nlohmann/json/releases/download/v3.11.3/include.zip
-)
-FetchContent_MakeAvailable(json)
-
-add_library(nlohmann_json INTERFACE)
-target_include_directories(nlohmann_json INTERFACE ${json_SOURCE_DIR}/include)
-add_library(nlohmann_json::nlohmann_json ALIAS nlohmann_json)
-
 # ── GLAD (cargador de funciones OpenGL, pre-generado) ──
 add_subdirectory(external)
 
@@ -102,6 +88,7 @@ add_executable(${PROJECT_NAME}
     src/Camera.cpp
     src/PickingFBO.cpp
     src/BoundingBox.cpp
+    src/SceneIO.cpp
 )
 
 target_include_directories(${PROJECT_NAME} PRIVATE include)
@@ -112,7 +99,6 @@ target_link_libraries(${PROJECT_NAME} PRIVATE
     glad
     imgui
     tinyobjloader
-    nlohmann_json::nlohmann_json
     OpenGL::GL
 )
 

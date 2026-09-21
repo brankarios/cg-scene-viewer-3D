@@ -52,6 +52,6 @@ public:
     // Resetear la cámara a los valores por defecto enfocando un objetivo
     void reset(glm::vec3 newTarget = glm::vec3(0.0f, 0.0f, 0.0f), float newDistance = 3.5f);
 
-private:
+    // Recalcular vectores y posición de la cámara
     void updateCameraVectors();
 };

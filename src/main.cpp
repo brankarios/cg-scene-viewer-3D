@@ -16,6 +16,7 @@
 #include "Camera.h"
 #include "PickingFBO.h"
 #include "BoundingBox.h"
+#include "SceneIO.h"
 
 #include <iostream>
 #include <string>
@@ -91,6 +92,63 @@ std::string openMaterialFileDialog() {
     ofn.Flags = OFN_PATHMUSTEXIST | OFN_FILEMUSTEXIST | OFN_NOCHANGEDIR;
 
     if (GetOpenFileNameA(&ofn)) {
+        return std::string(filename);
+    }
+#endif
+    return "";
+}
+
+std::string saveSceneFileDialog() {
+#ifdef _WIN32
+    char filename[MAX_PATH] = "mi_escena.scene";
+    OPENFILENAMEA ofn = {};
+    ofn.lStructSize = sizeof(ofn);
+    ofn.lpstrFile = filename;
+    ofn.nMaxFile = MAX_PATH;
+    ofn.lpstrFilter = "Scene Files (*.scene)\0*.scene\0All Files\0*.*\0";
+    ofn.lpstrDefExt = "scene";
+    ofn.nFilterIndex = 1;
+    ofn.Flags = OFN_PATHMUSTEXIST | OFN_OVERWRITEPROMPT | OFN_NOCHANGEDIR;
+
+    if (GetSaveFileNameA(&ofn)) {
+        return std::string(filename);
+    }
+#endif
+    return "";
+}
+
+std::string openSceneFileDialog() {
+#ifdef _WIN32
+    char filename[MAX_PATH] = "";
+    OPENFILENAMEA ofn = {};
+    ofn.lStructSize = sizeof(ofn);
+    ofn.lpstrFile = filename;
+    ofn.nMaxFile = MAX_PATH;
+    ofn.lpstrFilter = "Scene Files (*.scene)\0*.scene\0All Files\0*.*\0";
+    ofn.nFilterIndex = 1;
+    ofn.Flags = OFN_PATHMUSTEXIST | OFN_FILEMUSTEXIST | OFN_NOCHANGEDIR;
+
+    if (GetOpenFileNameA(&ofn)) {
+        return std::string(filename);
+    }
+#endif
+    return "";
+}
+
+std::string exportOBJFileDialog(const std::string& defaultName = "modelo_exportado.obj") {
+#ifdef _WIN32
+    char filename[MAX_PATH] = "";
+    strncpy_s(filename, defaultName.c_str(), sizeof(filename) - 1);
+    OPENFILENAMEA ofn = {};
+    ofn.lStructSize = sizeof(ofn);
+    ofn.lpstrFile = filename;
+    ofn.nMaxFile = MAX_PATH;
+    ofn.lpstrFilter = "Wavefront OBJ (*.obj)\0*.obj\0All Files\0*.*\0";
+    ofn.lpstrDefExt = "obj";
+    ofn.nFilterIndex = 1;
+    ofn.Flags = OFN_PATHMUSTEXIST | OFN_OVERWRITEPROMPT | OFN_NOCHANGEDIR;
+
+    if (GetSaveFileNameA(&ofn)) {
         return std::string(filename);
     }
 #endif
@@ -489,6 +547,60 @@ int main() {
             models.clear();
             g_selectedModel = -1;
             g_selectedMesh = -1;
+        }
+
+        // ── Gestión de Escena y Exportación ──
+        if (ImGui::Button("Guardar Escena...", ImVec2(140, 26))) {
+            std::string savePath = saveSceneFileDialog();
+            if (!savePath.empty()) {
+                EnvironmentData env{ clearColor, lightDir, lightColor, ambientLight };
+                RenderSettingsData rs{
+                    g_depthTest, g_cullFace, g_wireframe,
+                    g_showVertices, g_vertexSize,
+                    g_showNormals, g_normalLength, g_normalColor,
+                    g_showBoundingBox
+                };
+                SceneIO::saveScene(savePath, g_camera, env, rs, models);
+            }
+        }
+        ImGui::SameLine();
+        if (ImGui::Button("Cargar Escena...", ImVec2(130, 26))) {
+            std::string loadPath = openSceneFileDialog();
+            if (!loadPath.empty()) {
+                EnvironmentData env;
+                RenderSettingsData rs;
+                if (SceneIO::loadScene(loadPath, g_camera, env, rs, models)) {
+                    clearColor = env.clearColor;
+                    lightDir = env.lightDir;
+                    lightColor = env.lightColor;
+                    ambientLight = env.ambientLight;
+
+                    g_depthTest = rs.depthTest;
+                    g_cullFace = rs.cullFace;
+                    g_wireframe = rs.wireframe;
+                    g_showVertices = rs.showVertices;
+                    g_vertexSize = rs.vertexSize;
+                    g_showNormals = rs.showNormals;
+                    g_normalLength = rs.normalLength;
+                    g_normalColor = rs.normalColor;
+                    g_showBoundingBox = rs.showBoundingBox;
+
+                    if (!models.empty()) {
+                        g_selectedModel = 0;
+                        g_selectedMesh = -1;
+                    }
+                }
+            }
+        }
+
+        if (!models.empty()) {
+            if (ImGui::Button("Exportar como OBJ (.obj + .mtl)...", ImVec2(278, 28))) {
+                std::string defaultName = models[0]->name + "_exportado.obj";
+                std::string exportPath = exportOBJFileDialog(defaultName);
+                if (!exportPath.empty()) {
+                    SceneIO::exportModelToOBJ(exportPath, *models[0]);
+                }
+            }
         }
 
         if (models.empty()) {

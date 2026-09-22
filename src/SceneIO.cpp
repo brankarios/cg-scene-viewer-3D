@@ -23,21 +23,21 @@ bool SceneIO::saveScene(const std::string& filePath,
     out << std::fixed << std::setprecision(6);
     out << "# CG Scene Viewer 3D - Scene Format v1.0\n\n";
 
-    // ── Cámara ──
+    // Cámara
     out << "[CAMERA]\n";
     out << "distance " << camera.distance << "\n";
     out << "yaw " << camera.yaw << "\n";
     out << "pitch " << camera.pitch << "\n";
     out << "target " << camera.target.x << " " << camera.target.y << " " << camera.target.z << "\n\n";
 
-    // ── Entorno y Luces ──
+    // Entorno y luces
     out << "[ENVIRONMENT]\n";
     out << "clearColor " << env.clearColor.r << " " << env.clearColor.g << " " << env.clearColor.b << "\n";
     out << "lightDir " << env.lightDir.x << " " << env.lightDir.y << " " << env.lightDir.z << "\n";
     out << "lightColor " << env.lightColor.r << " " << env.lightColor.g << " " << env.lightColor.b << "\n";
     out << "ambientLight " << env.ambientLight.r << " " << env.ambientLight.g << " " << env.ambientLight.b << "\n\n";
 
-    // ── Opciones de Render ──
+    // Opciones de render
     out << "[RENDER_SETTINGS]\n";
     out << "depthTest " << (renderSettings.depthTest ? 1 : 0) << "\n";
     out << "cullFace " << (renderSettings.cullFace ? 1 : 0) << "\n";
@@ -50,7 +50,7 @@ bool SceneIO::saveScene(const std::string& filePath,
                           << renderSettings.normalColor.b << " " << renderSettings.normalColor.a << "\n";
     out << "showBoundingBox " << (renderSettings.showBoundingBox ? 1 : 0) << "\n\n";
 
-    // ── Modelos y Submallas ──
+    // Modelos y submallas
     out << "[MODELS_COUNT] " << models.size() << "\n\n";
 
     for (size_t i = 0; i < models.size(); i++) {
@@ -81,10 +81,6 @@ bool SceneIO::saveScene(const std::string& filePath,
     std::cout << "Escena guardada exitosamente en: " << filePath << std::endl;
     return true;
 }
-
-// ────────────────────────────────────────────
-// 2. Cargar Escena desde formato propio .scene
-// ────────────────────────────────────────────
 
 bool SceneIO::loadScene(const std::string& filePath,
                         Camera& camera,
@@ -268,10 +264,6 @@ bool SceneIO::loadScene(const std::string& filePath,
     return true;
 }
 
-// ────────────────────────────────────────────
-// 3. Exportar Modelo como .obj y .mtl propio
-// ────────────────────────────────────────────
-
 bool SceneIO::exportModelToOBJ(const std::string& objFilePath, const Model& model) {
     if (model.meshes.empty()) {
         std::cerr << "Error: El modelo no tiene mallas para exportar." << std::endl;
@@ -283,7 +275,7 @@ bool SceneIO::exportModelToOBJ(const std::string& objFilePath, const Model& mode
     std::string mtlFileName = baseName + ".mtl";
     fs::path mtlPath = objPath.parent_path() / mtlFileName;
 
-    // ── Escribir archivo .mtl ──
+    // Archivo .mtl
     std::ofstream mtlFile(mtlPath);
     if (!mtlFile.is_open()) {
         std::cerr << "Error: No se pudo crear el archivo de material: " << mtlPath << std::endl;
@@ -306,7 +298,7 @@ bool SceneIO::exportModelToOBJ(const std::string& objFilePath, const Model& mode
     }
     mtlFile.close();
 
-    // ── Escribir archivo .obj ──
+    // Archivo .obj
     std::ofstream objFile(objPath);
     if (!objFile.is_open()) {
         std::cerr << "Error: No se pudo crear el archivo OBJ: " << objPath << std::endl;
@@ -319,33 +311,29 @@ bool SceneIO::exportModelToOBJ(const std::string& objFilePath, const Model& mode
     objFile << "mtllib " << mtlFileName << "\n\n";
 
     glm::mat4 modelMat = model.getModelMatrix();
-    unsigned int vertexOffset = 1; // Índices de OBJ son 1-based
+    unsigned int vertexOffset = 1;
 
     for (size_t meshIdx = 0; meshIdx < model.meshes.size(); meshIdx++) {
         const auto& mesh = model.meshes[meshIdx];
         std::string submeshName = mesh.name.empty() ? ("Submalla_" + std::to_string(meshIdx)) : mesh.name;
         std::string matName = mesh.name.empty() ? ("Material_Submalla_" + std::to_string(meshIdx)) : (mesh.name + "_Mat");
 
-        // Matriz combinada: Transformación global del modelo * Transformación local de la submalla
         glm::mat4 finalMat = modelMat * mesh.getLocalModelMatrix();
         glm::mat3 normalMat = glm::mat3(glm::transpose(glm::inverse(finalMat)));
 
         objFile << "g " << submeshName << "\n";
         objFile << "usemtl " << matName << "\n";
 
-        // Vértices transformados en coordenadas de mundo
         for (const auto& v : mesh.vertices) {
             glm::vec4 worldPos = finalMat * glm::vec4(v.position, 1.0f);
             objFile << "v " << worldPos.x << " " << worldPos.y << " " << worldPos.z << "\n";
         }
 
-        // Normales transformadas
         for (const auto& v : mesh.vertices) {
             glm::vec3 worldNorm = glm::normalize(normalMat * v.normal);
             objFile << "vn " << worldNorm.x << " " << worldNorm.y << " " << worldNorm.z << "\n";
         }
 
-        // Caras poligonales (triángulos con v//vn)
         for (size_t i = 0; i < mesh.indices.size(); i += 3) {
             unsigned int idx0 = mesh.indices[i] + vertexOffset;
             unsigned int idx1 = mesh.indices[i + 1] + vertexOffset;

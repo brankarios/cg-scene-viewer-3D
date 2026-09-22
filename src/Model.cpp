@@ -49,8 +49,7 @@ bool Model::loadFromFile(const std::string& path) {
         mesh.name = shape.name;
 
         if (hasNormals) {
-            // ── Caso 1: El .obj incluye normales ──
-            // Deduplicar vertices usando (vertex_index, normal_index) como clave
+            // Con normales
             std::map<std::pair<int,int>, unsigned int> uniqueVertices;
 
             for (size_t i = 0; i < shape.mesh.indices.size(); i++) {
@@ -75,8 +74,7 @@ bool Model::loadFromFile(const std::string& path) {
                 mesh.indices.push_back(uniqueVertices[key]);
             }
         } else {
-            // ── Caso 2: Sin normales - calcularlas por promedio ──
-            // Deduplicar solo por vertex_index (smooth shading)
+            // Sin normales: calcular promedio
             std::map<int, unsigned int> uniqueVertices;
 
             for (size_t i = 0; i < shape.mesh.indices.size(); i++) {
@@ -89,27 +87,25 @@ bool Model::loadFromFile(const std::string& path) {
                         attrib.vertices[3 * idx.vertex_index + 1],
                         attrib.vertices[3 * idx.vertex_index + 2]
                     );
-                    vertex.normal = glm::vec3(0.0f); // Se calculara despues
+                    vertex.normal = glm::vec3(0.0f);
                     uniqueVertices[idx.vertex_index] = static_cast<unsigned int>(mesh.vertices.size());
                     mesh.vertices.push_back(vertex);
                 }
                 mesh.indices.push_back(uniqueVertices[idx.vertex_index]);
             }
 
-            // Calcular normales promediando las normales de las caras
             computeNormals(mesh.vertices, mesh.indices);
         }
 
-        // ── Material: leer color difuso (Kd) y alfa (d) del .mtl ──
+        // Color difuso y alfa desde .mtl
         if (!shape.mesh.material_ids.empty() && shape.mesh.material_ids[0] >= 0) {
             int matId = shape.mesh.material_ids[0];
             const auto& mat = materials[matId];
             mesh.color = glm::vec4(
                 mat.diffuse[0], mat.diffuse[1], mat.diffuse[2],
-                mat.dissolve // dissolve = 1.0 opaco, 0.0 transparente
+                mat.dissolve
             );
         }
-        // Si no hay material, se queda con el gris por defecto (0.8, 0.8, 0.8, 1.0)
 
         meshes.push_back(std::move(mesh));
     }

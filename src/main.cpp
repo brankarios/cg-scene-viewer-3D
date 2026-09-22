@@ -52,7 +52,7 @@ static double g_lastMouseY = 0.0;
 
 static PickingFBO g_pickingFBO;
 
-// Modos de Visualización y Render (Inciso 4 y 5)
+// Visualización y render
 static bool g_wireframe = false;
 static bool g_showVertices = false;
 static float g_vertexSize = 5.0f;
@@ -63,8 +63,8 @@ static bool g_showBoundingBox = false;
 static bool g_depthTest = true;
 static bool g_cullFace = false;
 
-// ── Primitivas Parametrizables ──
-static int g_selectedPrimitive = 0; // 0: Cubo, 1: Pirámide, 2: Esfera, 3: Cilindro
+// Primitivas
+static int g_selectedPrimitive = 0;
 static float g_cubeSize = 1.0f;
 static float g_pyramidWidth = 1.0f;
 static float g_pyramidHeight = 1.2f;
@@ -75,6 +75,14 @@ static float g_cylinderRadius = 0.6f;
 static float g_cylinderHeight = 1.2f;
 static int g_cylinderSegments = 32;
 static glm::vec4 g_primitiveColor(0.8f, 0.8f, 0.8f, 1.0f);
+
+// Barra lateral
+static bool g_sidebarOpen = true;
+static float g_sidebarWidth = 340.0f;
+
+static inline float getEffectiveSidebarWidth() {
+    return g_sidebarOpen ? g_sidebarWidth : 0.0f;
+}
 
 std::string openFileDialog() {
 #ifdef _WIN32
@@ -185,7 +193,7 @@ void scroll_callback(GLFWwindow* window, double xoffset, double yoffset) {
     g_camera.processMouseScroll(static_cast<float>(yoffset));
 }
 
-// ── Función de Color Picking ──
+// Picking
 struct PickTarget {
     int modelIndex;
     int meshIndex;
@@ -207,10 +215,13 @@ void performPicking(int mouseX, int mouseY,
         return;
     }
 
-    pickingFBO.resize(display_w, display_h);
+    int sidebarPixels = static_cast<int>(getEffectiveSidebarWidth());
+    int sceneW = display_w - sidebarPixels;
+    if (sceneW < 1) sceneW = 1;
+    pickingFBO.resize(sceneW, display_h);
     pickingFBO.bind();
 
-    glViewport(0, 0, display_w, display_h);
+    glViewport(0, 0, sceneW, display_h);
     glClearColor(0.0f, 0.0f, 0.0f, 0.0f);
     glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
     glEnable(GL_DEPTH_TEST);
@@ -222,7 +233,6 @@ void performPicking(int mouseX, int mouseY,
     std::map<int, PickTarget> idMap;
 
     if (specificity == SelectionSpecificity::Global) {
-        // En modo Global: cada modelo entero recibe un ID único
         for (size_t i = 0; i < models.size(); i++) {
             int id = static_cast<int>(i) + 1;
             idMap[id] = { static_cast<int>(i), -1 };
@@ -236,7 +246,6 @@ void performPicking(int mouseX, int mouseY,
             }
         }
     } else {
-        // En modo Local: cada submalla individual recibe su propio ID único
         int currentId = 1;
         for (size_t i = 0; i < models.size(); i++) {
             glm::mat4 parentMatrix = models[i]->getModelMatrix();
@@ -283,88 +292,116 @@ int main() {
         return -1;
     }
     glfwMakeContextCurrent(window);
-    glfwSwapInterval(1); // VSync activado
+    glfwSwapInterval(1);
     glfwSetFramebufferSizeCallback(window, framebuffer_size_callback);
     glfwSetScrollCallback(window, scroll_callback);
 
-    // ── Cargar funciones de OpenGL con GLAD ──
     if (!gladLoadGLLoader((GLADloadproc)glfwGetProcAddress)) {
         std::cerr << "Error: No se pudo inicializar GLAD" << std::endl;
         return -1;
     }
 
-    // Imprimir información del sistema
     std::cout << "OpenGL: " << glGetString(GL_VERSION) << std::endl;
     std::cout << "GPU:    " << glGetString(GL_RENDERER) << std::endl;
     std::cout << "GLSL:   " << glGetString(GL_SHADING_LANGUAGE_VERSION) << std::endl;
 
-    // ── Compilar shader base ──
+    // Shaders
     Shader baseShader;
     if (!baseShader.load("shaders/base.vert", "shaders/base.frag")) {
         std::cerr << "Error: No se pudieron cargar los shaders base" << std::endl;
         return -1;
     }
 
-    // ── Compilar shader de picking ──
     Shader pickingShader;
     if (!pickingShader.load("shaders/picking.vert", "shaders/picking.frag")) {
         std::cerr << "Error: No se pudieron cargar los shaders de picking" << std::endl;
         return -1;
     }
 
-    // ── Compilar shader de normales (con Geometry Shader) ──
     Shader normalsShader;
     if (!normalsShader.load("shaders/normals.vert", "shaders/normals.frag", "shaders/normals.geom")) {
         std::cerr << "Advertencia: No se pudieron cargar los shaders de normales" << std::endl;
     }
 
-    // ── Compilar shader plano para Bounding Box y Vértices ──
     Shader flatShader;
     if (!flatShader.load("shaders/flat.vert", "shaders/flat.frag")) {
         std::cerr << "Advertencia: No se pudieron cargar los shaders planos" << std::endl;
     }
 
-    // ── Inicializar Bounding Box ──
     BoundingBox g_boundingBox;
     g_boundingBox.init();
 
-    // ── Inicializar Framebuffer de Picking ──
     g_pickingFBO.init(1280, 720);
 
-    // ── Configurar Dear ImGui ──
+    // ImGui
     IMGUI_CHECKVERSION();
     ImGui::CreateContext();
     ImGuiIO& io = ImGui::GetIO();
     io.ConfigFlags |= ImGuiConfigFlags_NavEnableKeyboard;
 
-    // Tema oscuro estilizado
     ImGui::StyleColorsDark();
     ImGuiStyle& style = ImGui::GetStyle();
-    style.WindowRounding = 6.0f;
+    style.WindowRounding = 0.0f;
     style.FrameRounding = 4.0f;
     style.PopupRounding = 4.0f;
     style.GrabRounding = 4.0f;
+    style.TabRounding = 4.0f;
+    style.ScrollbarRounding = 6.0f;
+    style.ChildRounding = 4.0f;
+    style.WindowBorderSize = 0.0f;
+    style.FrameBorderSize = 0.0f;
+    style.WindowPadding = ImVec2(14.0f, 10.0f);
+    style.FramePadding = ImVec2(8.0f, 4.0f);
+    style.ItemSpacing = ImVec2(8.0f, 6.0f);
+    style.ItemInnerSpacing = ImVec2(6.0f, 4.0f);
+    style.ScrollbarSize = 12.0f;
+    style.GrabMinSize = 8.0f;
 
-    // Inicializar backends de ImGui
+    ImVec4* colors = style.Colors;
+    colors[ImGuiCol_WindowBg]           = ImVec4(0.10f, 0.10f, 0.12f, 1.00f);
+    colors[ImGuiCol_ChildBg]            = ImVec4(0.12f, 0.12f, 0.14f, 1.00f);
+    colors[ImGuiCol_PopupBg]            = ImVec4(0.10f, 0.10f, 0.13f, 0.96f);
+    colors[ImGuiCol_Border]             = ImVec4(0.22f, 0.22f, 0.26f, 0.60f);
+    colors[ImGuiCol_FrameBg]            = ImVec4(0.16f, 0.16f, 0.20f, 1.00f);
+    colors[ImGuiCol_FrameBgHovered]     = ImVec4(0.22f, 0.22f, 0.28f, 1.00f);
+    colors[ImGuiCol_FrameBgActive]      = ImVec4(0.28f, 0.28f, 0.36f, 1.00f);
+    colors[ImGuiCol_TitleBg]            = ImVec4(0.08f, 0.08f, 0.10f, 1.00f);
+    colors[ImGuiCol_TitleBgActive]      = ImVec4(0.12f, 0.12f, 0.16f, 1.00f);
+    colors[ImGuiCol_MenuBarBg]          = ImVec4(0.12f, 0.12f, 0.14f, 1.00f);
+    colors[ImGuiCol_ScrollbarBg]        = ImVec4(0.10f, 0.10f, 0.12f, 0.80f);
+    colors[ImGuiCol_ScrollbarGrab]      = ImVec4(0.30f, 0.30f, 0.38f, 1.00f);
+    colors[ImGuiCol_ScrollbarGrabHovered] = ImVec4(0.38f, 0.38f, 0.48f, 1.00f);
+    colors[ImGuiCol_ScrollbarGrabActive]  = ImVec4(0.45f, 0.45f, 0.56f, 1.00f);
+    colors[ImGuiCol_CheckMark]          = ImVec4(0.33f, 0.75f, 1.00f, 1.00f);
+    colors[ImGuiCol_SliderGrab]         = ImVec4(0.33f, 0.65f, 1.00f, 0.80f);
+    colors[ImGuiCol_SliderGrabActive]   = ImVec4(0.40f, 0.75f, 1.00f, 1.00f);
+    colors[ImGuiCol_Button]             = ImVec4(0.18f, 0.18f, 0.24f, 1.00f);
+    colors[ImGuiCol_ButtonHovered]      = ImVec4(0.28f, 0.36f, 0.54f, 1.00f);
+    colors[ImGuiCol_ButtonActive]       = ImVec4(0.22f, 0.44f, 0.72f, 1.00f);
+    colors[ImGuiCol_Header]             = ImVec4(0.18f, 0.24f, 0.36f, 0.80f);
+    colors[ImGuiCol_HeaderHovered]      = ImVec4(0.24f, 0.34f, 0.52f, 0.80f);
+    colors[ImGuiCol_HeaderActive]       = ImVec4(0.28f, 0.42f, 0.62f, 1.00f);
+    colors[ImGuiCol_Separator]          = ImVec4(0.24f, 0.24f, 0.30f, 0.60f);
+    colors[ImGuiCol_SeparatorHovered]   = ImVec4(0.33f, 0.55f, 0.82f, 0.80f);
+    colors[ImGuiCol_Tab]                = ImVec4(0.16f, 0.18f, 0.24f, 1.00f);
+    colors[ImGuiCol_TabHovered]         = ImVec4(0.28f, 0.38f, 0.56f, 0.80f);
+    colors[ImGuiCol_TabSelected]        = ImVec4(0.22f, 0.34f, 0.52f, 1.00f);
+    colors[ImGuiCol_TextDisabled]       = ImVec4(0.50f, 0.50f, 0.55f, 1.00f);
+
     ImGui_ImplGlfw_InitForOpenGL(window, true);
     ImGui_ImplOpenGL3_Init("#version 330");
 
-    // ── Estado de la escena ──
     std::vector<std::unique_ptr<Model>> models;
     glm::vec3 clearColor(0.12f, 0.12f, 0.14f);
 
-    // Iluminación (uniforms del fragment shader)
     glm::vec3 lightDir(-0.2f, -1.0f, -0.3f);
     glm::vec3 lightColor(1.0f, 1.0f, 1.0f);
     glm::vec3 ambientLight(0.2f, 0.2f, 0.2f);
 
-    // ── Habilitar Depth Test ──
     glEnable(GL_DEPTH_TEST);
 
-    // Control de tiempo para movimiento uniforme
     float lastFrameTime = static_cast<float>(glfwGetTime());
 
-    // ── Bucle principal ──
     while (!glfwWindowShouldClose(window)) {
         float currentFrameTime = static_cast<float>(glfwGetTime());
         float deltaTime = currentFrameTime - lastFrameTime;
@@ -375,12 +412,15 @@ int main() {
         int display_w, display_h;
         glfwGetFramebufferSize(window, &display_w, &display_h);
 
-        // Matrices de Vista y Proyección de la Cámara
-        float aspect = (display_h > 0) ? static_cast<float>(display_w) / static_cast<float>(display_h) : 1.0f;
+        // Vista y proyección
+        float effectiveSidebarW = getEffectiveSidebarWidth();
+        float sceneW = static_cast<float>(display_w) - effectiveSidebarW;
+        if (sceneW < 1.0f) sceneW = 1.0f;
+        float aspect = (display_h > 0) ? sceneW / static_cast<float>(display_h) : 1.0f;
         glm::mat4 view = g_camera.getViewMatrix();
         glm::mat4 projection = glm::perspective(glm::radians(g_camera.zoom), aspect, 0.1f, 100.0f);
 
-        // ── Entrada de teclado para la cámara (WASD + Espacio / Shift) ──
+        // Teclado
         if (!io.WantCaptureKeyboard) {
             if (glfwGetKey(window, GLFW_KEY_W) == GLFW_PRESS)
                 g_camera.processKeyboard(CameraMovement::FORWARD, deltaTime);
@@ -395,7 +435,6 @@ int main() {
             if (glfwGetKey(window, GLFW_KEY_LEFT_SHIFT) == GLFW_PRESS)
                 g_camera.processKeyboard(CameraMovement::DOWN, deltaTime);
 
-            // Atajos de modo con teclas
             if (glfwGetKey(window, GLFW_KEY_R) == GLFW_PRESS) g_mode = InteractionMode::Rotate;
             if (glfwGetKey(window, GLFW_KEY_G) == GLFW_PRESS) g_mode = InteractionMode::Translate;
             if (glfwGetKey(window, GLFW_KEY_S) == GLFW_PRESS && glfwGetKey(window, GLFW_KEY_LEFT_CONTROL) != GLFW_PRESS)
@@ -403,7 +442,7 @@ int main() {
             if (glfwGetKey(window, GLFW_KEY_C) == GLFW_PRESS) g_mode = InteractionMode::Navigate;
         }
 
-        // ── Manejo del Mouse en el Viewport ──
+        // Mouse
         double mouseX, mouseY;
         glfwGetCursorPos(window, &mouseX, &mouseY);
         float mouseDeltaX = static_cast<float>(mouseX - g_lastMouseX);
@@ -415,31 +454,31 @@ int main() {
         bool rightDown = glfwGetMouseButton(window, GLFW_MOUSE_BUTTON_RIGHT) == GLFW_PRESS;
         bool middleDown = glfwGetMouseButton(window, GLFW_MOUSE_BUTTON_MIDDLE) == GLFW_PRESS;
 
-        // Comenzar arrastre / clic solo si no estamos interactuando con ImGui
         if (!io.WantCaptureMouse) {
             if (leftDown && !g_isLeftDragging) {
                 g_isLeftDragging = true;
 
-                // Coordenadas ajustadas a la resolución del Framebuffer (DPI scaling)
                 int win_w, win_h;
                 glfwGetWindowSize(window, &win_w, &win_h);
                 float scaleX = (win_w > 0) ? static_cast<float>(display_w) / win_w : 1.0f;
                 float scaleY = (win_h > 0) ? static_cast<float>(display_h) / win_h : 1.0f;
-                int fbMouseX = static_cast<int>(mouseX * scaleX);
+                int sidebarOffset = static_cast<int>(getEffectiveSidebarWidth());
+                int fbMouseX = static_cast<int>(mouseX * scaleX) - sidebarOffset;
                 int fbMouseY = static_cast<int>(mouseY * scaleY);
 
-                // ── Realizar Color Picking en el momento del clic ──
+                // Picking
                 int pickedModel = -1, pickedMesh = -1;
-                performPicking(fbMouseX, fbMouseY,
-                               display_w, display_h, view, projection,
-                               models, pickingShader, g_pickingFBO, g_specificity,
-                               pickedModel, pickedMesh);
+                if (fbMouseX >= 0) {
+                    performPicking(fbMouseX, fbMouseY,
+                                   display_w, display_h, view, projection,
+                                   models, pickingShader, g_pickingFBO, g_specificity,
+                                   pickedModel, pickedMesh);
+                }
 
                 if (pickedModel >= 0) {
                     g_selectedModel = pickedModel;
                     g_selectedMesh = pickedMesh;
                 } else {
-                    // Clic en el vacío: deseleccionar
                     g_selectedModel = -1;
                     g_selectedMesh = -1;
                 }
@@ -451,7 +490,7 @@ int main() {
         if (!rightDown) g_isRightDragging = false;
         if (!middleDown) g_isMiddleDragging = false;
 
-        // 1. Click derecho arrastrando: Orbitar o Panear Cámara
+        // Orbitar / panear
         if (g_isRightDragging) {
             if (glfwGetKey(window, GLFW_KEY_LEFT_SHIFT) == GLFW_PRESS) {
                 g_camera.processMousePan(mouseDeltaX, mouseDeltaY);
@@ -460,17 +499,16 @@ int main() {
             }
         }
 
-        // 2. Click central arrastrando: Panear Cámara
+        // Pan
         if (g_isMiddleDragging) {
             g_camera.processMousePan(mouseDeltaX, mouseDeltaY);
         }
 
-        // 3. Click izquierdo arrastrando: Manipular Modelo seleccionado o Navegar Cámara
+        // Transformación o navegación
         if (g_isLeftDragging) {
             bool hasModel = !models.empty() && g_selectedModel >= 0 && g_selectedModel < static_cast<int>(models.size());
 
             if (g_mode == InteractionMode::Navigate || !hasModel) {
-                // Orbitar cámara con click izquierdo si estamos en modo navegar o no hay modelo seleccionado
                 g_camera.processMouseOrbit(mouseDeltaX, mouseDeltaY);
             } else if (hasModel) {
                 auto& model = models[g_selectedModel];
@@ -489,7 +527,6 @@ int main() {
                         }
                     } else if (g_mode == InteractionMode::Translate) {
                         float speed = 0.0025f * g_camera.distance;
-                        // Transformar al espacio de orientación del modelo
                         glm::mat4 modelRot = glm::rotate(glm::mat4(1.0f), glm::radians(model->rotation.z), glm::vec3(0, 0, 1)) *
                                              glm::rotate(glm::mat4(1.0f), glm::radians(model->rotation.y), glm::vec3(0, 1, 0)) *
                                              glm::rotate(glm::mat4(1.0f), glm::radians(model->rotation.x), glm::vec3(1, 0, 0));
@@ -503,7 +540,6 @@ int main() {
                     }
                 } else {
                     if (g_mode == InteractionMode::Rotate) {
-                        // Rotación sobre el eje propio del modelo completo
                         if (glfwGetKey(window, GLFW_KEY_LEFT_CONTROL) == GLFW_PRESS || glfwGetKey(window, GLFW_KEY_Z) == GLFW_PRESS) {
                             model->rotation.z += mouseDeltaX * 0.5f;
                         } else {
@@ -511,11 +547,9 @@ int main() {
                             model->rotation.x += mouseDeltaY * 0.5f;
                         }
                     } else if (g_mode == InteractionMode::Translate) {
-                        // Mover modelo completo en el plano de la cámara
                         float speed = 0.0025f * g_camera.distance;
                         model->position += g_camera.right * (mouseDeltaX * speed) - g_camera.up * (mouseDeltaY * speed);
                     } else if (g_mode == InteractionMode::Scale) {
-                        // Escalar con el movimiento del ratón
                         float factor = 1.0f + (mouseDeltaX - mouseDeltaY) * 0.008f;
                         model->scale *= factor;
                         model->scale = glm::max(model->scale, glm::vec3(0.005f));
@@ -524,28 +558,131 @@ int main() {
             }
         }
 
-        // ── Iniciar frame de ImGui ──
         ImGui_ImplOpenGL3_NewFrame();
         ImGui_ImplGlfw_NewFrame();
         ImGui::NewFrame();
 
-        // ── Panel de control principal ──
-        ImGui::SetNextWindowPos(ImVec2(10, 10), ImGuiCond_FirstUseEver);
-        ImGui::SetNextWindowSize(ImVec2(380, 700), ImGuiCond_FirstUseEver);
-        ImGui::Begin("Panel de Control");
+        // Pestaña lateral
+        const float tabWidth = 26.0f;
+        const float tabHeight = 70.0f;
+        float currentSidebarWidth = getEffectiveSidebarWidth();
+        float tabY = glm::clamp(static_cast<float>(display_h) * 0.40f, 50.0f, static_cast<float>(display_h) - 100.0f);
 
-        // Info del sistema y estadísticas
-        ImGui::TextColored(ImVec4(0.4f, 0.8f, 1.0f, 1.0f), "CG Scene Viewer 3D");
-        ImGui::Text("FPS: %.1f (%.2f ms)", io.Framerate, 1000.0f / io.Framerate);
+        ImGui::SetNextWindowPos(ImVec2(currentSidebarWidth, tabY));
+        ImGui::SetNextWindowSize(ImVec2(tabWidth, tabHeight));
+        ImGuiWindowFlags tabFlags = ImGuiWindowFlags_NoTitleBar
+                                  | ImGuiWindowFlags_NoResize
+                                  | ImGuiWindowFlags_NoMove
+                                  | ImGuiWindowFlags_NoScrollbar
+                                  | ImGuiWindowFlags_NoBackground
+                                  | ImGuiWindowFlags_NoSavedSettings;
+        ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding, ImVec2(0, 0));
+        ImGui::PushStyleVar(ImGuiStyleVar_WindowBorderSize, 0.0f);
+        ImGui::Begin("##SidebarTab", nullptr, tabFlags);
+
+        ImVec2 tabP0 = ImGui::GetCursorScreenPos();
+        ImVec2 tabP1 = ImVec2(tabP0.x + tabWidth, tabP0.y + tabHeight);
+        ImGui::InvisibleButton("##TabHandle", ImVec2(tabWidth, tabHeight));
+        bool isTabHovered = ImGui::IsItemHovered();
+        bool isTabActive = ImGui::IsItemActive();
+
+        static bool s_isDraggingTab = false;
+        static float s_dragStartMouseX = 0.0f;
+
+        if (ImGui::IsItemActivated()) {
+            s_isDraggingTab = false;
+            s_dragStartMouseX = io.MousePos.x;
+        }
+
+        if (isTabActive) {
+            if (std::abs(io.MousePos.x - s_dragStartMouseX) > 4.0f) {
+                s_isDraggingTab = true;
+            }
+            if (s_isDraggingTab) {
+                if (io.MousePos.x < 90.0f) {
+                    g_sidebarOpen = false;
+                } else {
+                    float maxSidebarW = glm::max(220.0f, static_cast<float>(display_w) - 150.0f);
+                    g_sidebarWidth = glm::clamp(io.MousePos.x, 220.0f, glm::min(600.0f, maxSidebarW));
+                }
+            }
+        }
+
+        if (ImGui::IsItemDeactivated()) {
+            if (!s_isDraggingTab) {
+                g_sidebarOpen = !g_sidebarOpen;
+            }
+            s_isDraggingTab = false;
+        }
+
+        if (isTabHovered || isTabActive) {
+            ImGui::SetMouseCursor(ImGuiMouseCursor_ResizeEW);
+        }
+
+        ImDrawList* tabDrawList = ImGui::GetWindowDrawList();
+        ImU32 tabBgColor = isTabActive  ? IM_COL32(45, 55, 75, 245) :
+                           isTabHovered ? IM_COL32(35, 42, 58, 240) :
+                                          IM_COL32(24, 26, 34, 225);
+        ImU32 tabBorderColor = (isTabHovered || isTabActive) ? IM_COL32(90, 165, 245, 230) : IM_COL32(60, 68, 85, 180);
+        ImU32 tabIconColor   = (isTabHovered || isTabActive) ? IM_COL32(255, 255, 255, 255) : IM_COL32(180, 195, 215, 220);
+
+        tabDrawList->AddRectFilled(tabP0, tabP1, tabBgColor, 6.0f, ImDrawFlags_RoundCornersRight);
+        tabDrawList->AddRect(tabP0, tabP1, tabBorderColor, 6.0f, ImDrawFlags_RoundCornersRight, 1.5f);
+
+        const char* tabIconStr = g_sidebarOpen ? "<" : ">";
+        ImVec2 tabTextSize = ImGui::CalcTextSize(tabIconStr);
+        ImVec2 tabTextPos = ImVec2(tabP0.x + (tabWidth - tabTextSize.x) * 0.5f, tabP0.y + 12.0f);
+        tabDrawList->AddText(tabTextPos, tabIconColor, tabIconStr);
+
+        float gripX = tabP0.x + tabWidth * 0.5f;
+        float gripStartY = tabP0.y + 34.0f;
+        for (int i = 0; i < 3; i++) {
+            tabDrawList->AddCircleFilled(ImVec2(gripX, gripStartY + i * 8.0f), 1.8f, tabIconColor);
+        }
+
+        if (isTabHovered && !s_isDraggingTab) {
+            ImGui::BeginTooltip();
+            if (g_sidebarOpen) {
+                ImGui::Text("Ocultar menu (Click)");
+                ImGui::TextDisabled("Arrastrar para cambiar tamano");
+            } else {
+                ImGui::Text("Expandir menu (Click o Arrastrar)");
+            }
+            ImGui::EndTooltip();
+        }
+
+        ImGui::End();
+        ImGui::PopStyleVar(2);
+
+        // Barra lateral
+        if (g_sidebarOpen) {
+            currentSidebarWidth = g_sidebarWidth;
+            ImGui::SetNextWindowPos(ImVec2(0, 0));
+            ImGui::SetNextWindowSize(ImVec2(currentSidebarWidth, static_cast<float>(display_h)));
+            ImGuiWindowFlags sidebarFlags = ImGuiWindowFlags_NoMove
+                                          | ImGuiWindowFlags_NoResize
+                                          | ImGuiWindowFlags_NoCollapse
+                                          | ImGuiWindowFlags_NoTitleBar;
+            ImGui::Begin("##Sidebar", nullptr, sidebarFlags);
+
+        ImGui::PushStyleColor(ImGuiCol_Text, ImVec4(0.45f, 0.78f, 1.0f, 1.0f));
+        ImGui::Text("CG Scene Viewer 3D");
+        ImGui::PopStyleColor();
+        ImGui::SameLine(ImGui::GetWindowWidth() - 120.0f);
+        float fps = io.Framerate;
+        ImVec4 fpsColor = (fps >= 30.0f) ? ImVec4(0.2f, 1.0f, 0.3f, 1.0f) :
+                          (fps >= 15.0f) ? ImVec4(1.0f, 0.85f, 0.2f, 1.0f) :
+                                           ImVec4(1.0f, 0.3f, 0.2f, 1.0f);
+        ImGui::TextColored(fpsColor, "%.0f FPS", fps);
         ImGui::Separator();
+        ImGui::Spacing();
 
-        // Cargar modelo
-        if (ImGui::Button("Cargar OBJ...", ImVec2(140, 30))) {
+        if (ImGui::Button("Cargar OBJ...", ImVec2(-1, 28))) {
             std::string path = openFileDialog();
             if (!path.empty()) {
                 auto model = std::make_unique<Model>();
                 if (model->loadFromFile(path)) {
-                    models.clear(); // Mantener un solo objeto en la escena
+                    models.clear();
                     models.push_back(std::move(model));
                     g_selectedModel = 0;
                     g_selectedMesh = -1;
@@ -556,28 +693,27 @@ int main() {
             }
         }
 
-        ImGui::SameLine();
-        if (ImGui::Button("Eliminar Modelo", ImVec2(130, 30))) {
+        if (ImGui::Button("Borrar Escena Completa", ImVec2(-1, 28))) {
             models.clear();
             g_selectedModel = -1;
             g_selectedMesh = -1;
+            g_camera.reset(glm::vec3(0.0f, 0.0f, 0.0f), 3.5f);
         }
 
-        // ── Creación de Objetos Simples Parametrizables ──
         if (ImGui::CollapsingHeader("Crear Objeto Parametrizable", ImGuiTreeNodeFlags_DefaultOpen)) {
             const char* primItems[] = { "Cubo", "Piramide", "Esfera", "Cilindro" };
             ImGui::Combo("Tipo de Figura", &g_selectedPrimitive, primItems, IM_ARRAYSIZE(primItems));
 
-            if (g_selectedPrimitive == 0) { // Cubo
+            if (g_selectedPrimitive == 0) {
                 ImGui::SliderFloat("Tamano de Arista", &g_cubeSize, 0.1f, 5.0f, "%.2f");
-            } else if (g_selectedPrimitive == 1) { // Piramide
+            } else if (g_selectedPrimitive == 1) {
                 ImGui::SliderFloat("Ancho Base", &g_pyramidWidth, 0.1f, 5.0f, "%.2f");
                 ImGui::SliderFloat("Altura", &g_pyramidHeight, 0.1f, 5.0f, "%.2f");
-            } else if (g_selectedPrimitive == 2) { // Esfera
+            } else if (g_selectedPrimitive == 2) {
                 ImGui::SliderFloat("Radio", &g_sphereRadius, 0.1f, 3.0f, "%.2f");
                 ImGui::SliderInt("Sectores (Meridianos)", &g_sphereSectors, 6, 64);
                 ImGui::SliderInt("Pilas (Anillos)", &g_sphereStacks, 4, 32);
-            } else if (g_selectedPrimitive == 3) { // Cilindro
+            } else if (g_selectedPrimitive == 3) {
                 ImGui::SliderFloat("Radio", &g_cylinderRadius, 0.1f, 3.0f, "%.2f");
                 ImGui::SliderFloat("Altura", &g_cylinderHeight, 0.1f, 5.0f, "%.2f");
                 ImGui::SliderInt("Segmentos Radiales", &g_cylinderSegments, 6, 64);
@@ -585,7 +721,7 @@ int main() {
 
             ImGui::ColorEdit4("Color Inicial", &g_primitiveColor.x);
 
-            if (ImGui::Button("Generar y Cargar en Escena", ImVec2(278, 30))) {
+            if (ImGui::Button("Generar y Cargar en Escena", ImVec2(-1, 28))) {
                 std::unique_ptr<Model> newModel = nullptr;
                 if (g_selectedPrimitive == 0) {
                     newModel = PrimitiveGenerator::createCube(g_cubeSize, g_primitiveColor);
@@ -607,8 +743,7 @@ int main() {
             }
         }
 
-        // ── Gestión de Escena y Exportación ──
-        if (ImGui::Button("Guardar Escena...", ImVec2(140, 26))) {
+        if (ImGui::Button("Guardar Escena...", ImVec2(150, 26))) {
             std::string savePath = saveSceneFileDialog();
             if (!savePath.empty()) {
                 EnvironmentData env{ clearColor, lightDir, lightColor, ambientLight };
@@ -622,7 +757,7 @@ int main() {
             }
         }
         ImGui::SameLine();
-        if (ImGui::Button("Cargar Escena...", ImVec2(130, 26))) {
+        if (ImGui::Button("Cargar Escena...", ImVec2(-1, 26))) {
             std::string loadPath = openSceneFileDialog();
             if (!loadPath.empty()) {
                 EnvironmentData env;
@@ -652,7 +787,7 @@ int main() {
         }
 
         if (!models.empty()) {
-            if (ImGui::Button("Exportar como OBJ (.obj + .mtl)...", ImVec2(278, 28))) {
+            if (ImGui::Button("Exportar como OBJ (.obj + .mtl)...", ImVec2(-1, 28))) {
                 std::string defaultName = models[0]->name + "_exportado.obj";
                 std::string exportPath = exportOBJFileDialog(defaultName);
                 if (!exportPath.empty()) {
@@ -668,7 +803,6 @@ int main() {
         }
         ImGui::Separator();
 
-        // ── Barra de Herramientas de Interacción con el Mouse ──
         ImGui::TextColored(ImVec4(1.0f, 0.85f, 0.3f, 1.0f), "Herramienta Activa (Mouse):");
 
         auto modeButton = [](const char* label, InteractionMode mode) {
@@ -695,7 +829,6 @@ int main() {
         ImGui::TextDisabled("Atajos: [R] Rotar, [G] Mover, [S] Escalar, [C] Camara");
         ImGui::Separator();
 
-        // ── Modo de Especificidad de Selección (Inciso 3) ──
         ImGui::TextColored(ImVec4(1.0f, 0.85f, 0.3f, 1.0f), "Especificidad de Seleccion:");
         if (ImGui::RadioButton("Global (Objeto completo)", g_specificity == SelectionSpecificity::Global)) {
             g_specificity = SelectionSpecificity::Global;
@@ -707,7 +840,6 @@ int main() {
         ImGui::TextDisabled("Haz clic izquierdo en la escena 3D para seleccionar.");
         ImGui::Separator();
 
-        // ── Lista y Transformaciones de Modelos ──
         if (models.empty()) {
             ImGui::TextDisabled("No hay modelos en la escena.");
             ImGui::TextDisabled("Haz clic en 'Cargar OBJ...' para comenzar.");
@@ -726,7 +858,6 @@ int main() {
                     }
                 }
 
-                // Si estamos en modo Local y este modelo tiene submallas, listarlas identadas
                 if (g_specificity == SelectionSpecificity::Local && isModelSelected && model->meshes.size() > 1) {
                     ImGui::Indent(20.0f);
                     ImGui::TextDisabled("Submallas del modelo:");
@@ -758,7 +889,6 @@ int main() {
                     std::string meshTitle = curMesh.name.empty() ? ("Submalla " + std::to_string(g_selectedMesh)) : curMesh.name;
                     ImGui::TextColored(ImVec4(0.3f, 0.9f, 1.0f, 1.0f), "Submalla Seleccionada: %s (Indice: %d)", meshTitle.c_str(), g_selectedMesh);
 
-                    // Transformaciones Locales de la Submalla
                     ImGui::TextColored(ImVec4(0.4f, 0.8f, 1.0f, 1.0f), "Transformaciones de Submalla:");
                     ImGui::Text("Posicion Local:");
                     ImGui::DragFloat3("##mesh_pos", &curMesh.position.x, 0.02f);
@@ -793,7 +923,6 @@ int main() {
                     ImGui::TextDisabled("Transformaciones Globales (Afectan a todo el modelo):");
                 }
 
-                // Transformaciones Globales del Modelo
                 if (!isSubmeshSelected) {
                     ImGui::Text("Transformaciones del Objeto Completo:");
                 }
@@ -814,7 +943,6 @@ int main() {
                 if (ImGui::SmallButton("Reset##scale")) curModel->scale = glm::vec3(1.0f);
 
                 if (!isSubmeshSelected) {
-                    // Materiales y Color Difuso Global
                     ImGui::Separator();
                     ImGui::Text("Color Difuso Global (Kd):");
                     if (ImGui::ColorEdit4("##kd", &curModel->diffuseColor.x)) {
@@ -851,7 +979,6 @@ int main() {
 
         ImGui::Separator();
 
-        // ── Modos de Visualización (Inciso 4) ──
         if (ImGui::CollapsingHeader("Modos de Visualizacion", ImGuiTreeNodeFlags_DefaultOpen)) {
             ImGui::Checkbox("Modo Wireframe (Alambrico)", &g_wireframe);
 
@@ -885,7 +1012,6 @@ int main() {
 
         ImGui::Separator();
 
-        // ── Ajustes de Cámara ──
         if (ImGui::CollapsingHeader("Camara y Vista", ImGuiTreeNodeFlags_DefaultOpen)) {
             ImGui::Text("Distancia: %.2f", g_camera.distance);
             ImGui::Text("Yaw: %.1f deg, Pitch: %.1f deg", g_camera.yaw, g_camera.pitch);
@@ -895,7 +1021,6 @@ int main() {
             }
         }
 
-        // ── Ajustes y Opciones de Render (Inciso 5) ──
         if (ImGui::CollapsingHeader("Opciones de Render")) {
             ImGui::Checkbox("Depth Test (GL_DEPTH_TEST)", &g_depthTest);
             ImGui::Checkbox("Back-Face Culling (GL_CULL_FACE)", &g_cullFace);
@@ -906,7 +1031,6 @@ int main() {
             ImGui::ColorEdit3("Luz Ambiente", &ambientLight.x);
         }
 
-        // ── Guía de Controles Rápidos ──
         if (ImGui::CollapsingHeader("Ayuda de Controles (Mouse y Teclado)")) {
             ImGui::BulletText("Click Izquierdo: Seleccionar objeto o submalla (Color Picking)");
             ImGui::BulletText("Click Izquierdo + Arrastrar: Manipular objeto segun modo activo");
@@ -918,21 +1042,48 @@ int main() {
             ImGui::BulletText("Ctrl + Arrastrar en Rotacion: Rotar en eje Z");
         }
 
-        ImGui::End();
+            ImGui::End();
+        } else {
+            ImGui::SetNextWindowPos(ImVec2(static_cast<float>(display_w) - 105.0f, 12.0f));
+            ImGuiWindowFlags hudFlags = ImGuiWindowFlags_NoTitleBar
+                                      | ImGuiWindowFlags_NoResize
+                                      | ImGuiWindowFlags_NoMove
+                                      | ImGuiWindowFlags_NoScrollbar
+                                      | ImGuiWindowFlags_AlwaysAutoResize
+                                      | ImGuiWindowFlags_NoSavedSettings;
+            ImGui::PushStyleColor(ImGuiCol_WindowBg, ImVec4(0.10f, 0.10f, 0.14f, 0.75f));
+            ImGui::PushStyleVar(ImGuiStyleVar_WindowRounding, 4.0f);
+            ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding, ImVec2(8.0f, 4.0f));
+            ImGui::Begin("##MiniHUD", nullptr, hudFlags);
+            float fps = io.Framerate;
+            ImVec4 fpsColor = (fps >= 30.0f) ? ImVec4(0.2f, 1.0f, 0.3f, 1.0f) :
+                              (fps >= 15.0f) ? ImVec4(1.0f, 0.85f, 0.2f, 1.0f) :
+                                               ImVec4(1.0f, 0.3f, 0.2f, 1.0f);
+            ImGui::TextColored(fpsColor, "%.0f FPS", fps);
+            ImGui::End();
+            ImGui::PopStyleVar(2);
+            ImGui::PopStyleColor();
+        }
 
-        // ── Renderizado Principal Visible ──
+        // Render 3D
         ImGui::Render();
 
-        glViewport(0, 0, display_w, display_h);
+        int sidebarPixels = static_cast<int>(getEffectiveSidebarWidth());
+        int sceneWidth = display_w - sidebarPixels;
+        if (sceneWidth < 1) sceneWidth = 1;
 
-        // Control de Depth Test
+        glViewport(0, 0, display_w, display_h);
+        glClearColor(clearColor.x, clearColor.y, clearColor.z, 1.0f);
+        glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
+
+        glViewport(sidebarPixels, 0, sceneWidth, display_h);
+
         if (g_depthTest) {
             glEnable(GL_DEPTH_TEST);
         } else {
             glDisable(GL_DEPTH_TEST);
         }
 
-        // Control de Back-Face Culling
         if (g_cullFace) {
             glEnable(GL_CULL_FACE);
             glCullFace(GL_BACK);
@@ -940,18 +1091,12 @@ int main() {
             glDisable(GL_CULL_FACE);
         }
 
-        // Limpiar pantalla visible
-        glClearColor(clearColor.x, clearColor.y, clearColor.z, 1.0f);
-        glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
-
-        // Modo Wireframe vs Sólido
         if (g_wireframe) {
             glPolygonMode(GL_FRONT_AND_BACK, GL_LINE);
         } else {
             glPolygonMode(GL_FRONT_AND_BACK, GL_FILL);
         }
 
-        // Activar shader base y enviar uniforms
         baseShader.use();
         baseShader.setMat4("view", view);
         baseShader.setMat4("projection", projection);
@@ -959,15 +1104,13 @@ int main() {
         baseShader.setVec3("lightColor", lightColor);
         baseShader.setVec3("ambientLight", ambientLight);
 
-        // Dibujar todos los modelos
         for (const auto& model : models) {
             model->draw(baseShader);
         }
 
-        // Restaurar a modo sólido
         glPolygonMode(GL_FRONT_AND_BACK, GL_FILL);
 
-        // ── 1. Visualizar Vértices ──
+        // Vértices
         if (g_showVertices && !models.empty()) {
             flatShader.use();
             flatShader.setMat4("view", view);
@@ -988,7 +1131,7 @@ int main() {
             glPolygonMode(GL_FRONT_AND_BACK, GL_FILL);
         }
 
-        // ── 2. Visualizar Normales ──
+        // Normales
         if (g_showNormals && !models.empty()) {
             normalsShader.use();
             normalsShader.setMat4("view", view);
@@ -1005,7 +1148,7 @@ int main() {
             }
         }
 
-        // ── 3. Visualizar Bounding Box (AABB) ──
+        // Bounding box
         if (g_showBoundingBox && !models.empty() && g_selectedModel >= 0 && g_selectedModel < static_cast<int>(models.size())) {
             flatShader.use();
             flatShader.setMat4("view", view);
@@ -1019,27 +1162,21 @@ int main() {
                                    g_selectedMesh < static_cast<int>(selModel->meshes.size()));
 
             if (isLocalSubmesh) {
-                // AABB local de la submalla activa (Amarillo)
                 auto& curMesh = selModel->meshes[g_selectedMesh];
                 glm::mat4 meshMat = modelMat * curMesh.getLocalModelMatrix();
                 g_boundingBox.draw(flatShader, meshMat, curMesh.minBounds, curMesh.maxBounds, glm::vec4(1.0f, 0.9f, 0.0f, 1.0f));
-
-                // AABB global de todo el modelo (Verde tenue)
                 g_boundingBox.draw(flatShader, modelMat, selModel->minBounds, selModel->maxBounds, glm::vec4(0.2f, 0.7f, 0.2f, 0.4f));
             } else {
-                // AABB global de todo el modelo (Verde brillante)
                 g_boundingBox.draw(flatShader, modelMat, selModel->minBounds, selModel->maxBounds, glm::vec4(0.0f, 1.0f, 0.2f, 1.0f));
             }
         }
 
-        // Dibujar interfaz de ImGui encima de la escena 3D
+        glViewport(0, 0, display_w, display_h);
         ImGui_ImplOpenGL3_RenderDrawData(ImGui::GetDrawData());
-
         glfwSwapBuffers(window);
     }
 
-    // ── Limpieza ──
-    models.clear(); // Liberar modelos antes de destruir el contexto OpenGL
+    models.clear();
     ImGui_ImplOpenGL3_Shutdown();
     ImGui_ImplGlfw_Shutdown();
     ImGui::DestroyContext();

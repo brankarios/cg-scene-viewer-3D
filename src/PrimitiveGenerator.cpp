@@ -5,14 +5,10 @@
 
 constexpr float PI = 3.14159265358979323846f;
 
-// ────────────────────────────────────────────
-// 1. Cubo
-// ────────────────────────────────────────────
-
 std::unique_ptr<Model> PrimitiveGenerator::createCube(float size, const glm::vec4& color) {
     auto model = std::make_unique<Model>();
     model->name = "Cubo (" + std::to_string(size).substr(0, 4) + ")";
-    model->filePath = ""; // Geometría procedural generada en memoria
+    model->filePath = "";
     model->primitiveConfig = "cube " + std::to_string(size);
     model->diffuseColor = color;
 
@@ -22,7 +18,6 @@ std::unique_ptr<Model> PrimitiveGenerator::createCube(float size, const glm::vec
 
     float h = size * 0.5f;
 
-    // 24 vértices para preservar normales planas (aristas duras en cada cara)
     struct FaceData {
         glm::vec3 p0, p1, p2, p3;
         glm::vec3 normal;
@@ -69,10 +64,6 @@ std::unique_ptr<Model> PrimitiveGenerator::createCube(float size, const glm::vec
     return model;
 }
 
-// ────────────────────────────────────────────
-// 2. Pirámide
-// ────────────────────────────────────────────
-
 std::unique_ptr<Model> PrimitiveGenerator::createPyramid(float baseWidth, float height, const glm::vec4& color) {
     auto model = std::make_unique<Model>();
     model->name = "Piramide (W:" + std::to_string(baseWidth).substr(0, 3) + " H:" + std::to_string(height).substr(0, 3) + ")";
@@ -93,7 +84,7 @@ std::unique_ptr<Model> PrimitiveGenerator::createPyramid(float baseWidth, float 
     glm::vec3 p2( w, -h,  w);
     glm::vec3 p3(-w, -h,  w);
 
-    // ── Base inferior (-Y) ──
+    // Base
     glm::vec3 baseNormal(0.0f, -1.0f, 0.0f);
     unsigned int baseIdx = static_cast<unsigned int>(mesh.vertices.size());
     mesh.vertices.push_back({ p0, baseNormal });
@@ -101,7 +92,6 @@ std::unique_ptr<Model> PrimitiveGenerator::createPyramid(float baseWidth, float 
     mesh.vertices.push_back({ p2, baseNormal });
     mesh.vertices.push_back({ p3, baseNormal });
 
-    // Base en CCW viendo desde abajo
     mesh.indices.push_back(baseIdx + 0);
     mesh.indices.push_back(baseIdx + 2);
     mesh.indices.push_back(baseIdx + 1);
@@ -110,7 +100,7 @@ std::unique_ptr<Model> PrimitiveGenerator::createPyramid(float baseWidth, float 
     mesh.indices.push_back(baseIdx + 3);
     mesh.indices.push_back(baseIdx + 2);
 
-    // ── 4 Caras triangulares laterales ──
+    // Caras laterales
     auto addTriFace = [&](const glm::vec3& v0, const glm::vec3& v1, const glm::vec3& v2) {
         glm::vec3 normal = glm::normalize(glm::cross(v1 - v0, v2 - v0));
         unsigned int idx = static_cast<unsigned int>(mesh.vertices.size());
@@ -123,13 +113,9 @@ std::unique_ptr<Model> PrimitiveGenerator::createPyramid(float baseWidth, float 
         mesh.indices.push_back(idx + 2);
     };
 
-    // Frente (+Z)
     addTriFace(p3, p2, apex);
-    // Derecha (+X)
     addTriFace(p2, p1, apex);
-    // Atrás (-Z)
     addTriFace(p1, p0, apex);
-    // Izquierda (-X)
     addTriFace(p0, p3, apex);
 
     mesh.setup();
@@ -139,10 +125,6 @@ std::unique_ptr<Model> PrimitiveGenerator::createPyramid(float baseWidth, float 
 
     return model;
 }
-
-// ────────────────────────────────────────────
-// 3. Esfera (UV Sphere)
-// ────────────────────────────────────────────
 
 std::unique_ptr<Model> PrimitiveGenerator::createSphere(float radius, int sectors, int stacks, const glm::vec4& color) {
     sectors = std::max(sectors, 6);
@@ -160,7 +142,6 @@ std::unique_ptr<Model> PrimitiveGenerator::createSphere(float radius, int sector
 
     float lengthInv = 1.0f / radius;
 
-    // Generar vértices y normales
     for (int i = 0; i <= stacks; ++i) {
         float stackAngle = PI / 2.0f - static_cast<float>(i) * (PI / static_cast<float>(stacks));
         float xy = radius * std::cos(stackAngle);
@@ -179,7 +160,6 @@ std::unique_ptr<Model> PrimitiveGenerator::createSphere(float radius, int sector
         }
     }
 
-    // Generar índices
     for (int i = 0; i < stacks; ++i) {
         int k1 = i * (sectors + 1);
         int k2 = k1 + sectors + 1;
@@ -207,10 +187,6 @@ std::unique_ptr<Model> PrimitiveGenerator::createSphere(float radius, int sector
     return model;
 }
 
-// ────────────────────────────────────────────
-// 4. Cilindro
-// ────────────────────────────────────────────
-
 std::unique_ptr<Model> PrimitiveGenerator::createCylinder(float radius, float height, int segments, const glm::vec4& color) {
     segments = std::max(segments, 6);
 
@@ -226,7 +202,7 @@ std::unique_ptr<Model> PrimitiveGenerator::createCylinder(float radius, float he
 
     float h = height * 0.5f;
 
-    // ── Pared lateral ──
+    // Pared lateral
     for (int j = 0; j <= segments; ++j) {
         float angle = static_cast<float>(j) * (2.0f * PI / static_cast<float>(segments));
         float x = radius * std::cos(angle);
@@ -252,7 +228,7 @@ std::unique_ptr<Model> PrimitiveGenerator::createCylinder(float radius, float he
         mesh.indices.push_back(bot1);
     }
 
-    // ── Tapa superior (+Y) ──
+    // Tapa superior (+Y)
     unsigned int topCenterIdx = static_cast<unsigned int>(mesh.vertices.size());
     mesh.vertices.push_back({ {0.0f, h, 0.0f}, {0.0f, 1.0f, 0.0f} });
 
@@ -269,7 +245,7 @@ std::unique_ptr<Model> PrimitiveGenerator::createCylinder(float radius, float he
         mesh.indices.push_back(topCenterIdx + 2 + j);
     }
 
-    // ── Tapa inferior (-Y) ──
+    // Tapa inferior (-Y)
     unsigned int botCenterIdx = static_cast<unsigned int>(mesh.vertices.size());
     mesh.vertices.push_back({ {0.0f, -h, 0.0f}, {0.0f, -1.0f, 0.0f} });
 

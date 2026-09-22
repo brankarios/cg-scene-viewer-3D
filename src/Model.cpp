@@ -131,6 +131,7 @@ bool Model::loadFromFile(const std::string& path) {
     // Guardar nombre y ruta
     filePath = path;
     name = baseName;
+    primitiveConfig = "";
 
     // Si tinyobjloader cargó materiales, actualizar diffuseColor
     if (!materials.empty()) {

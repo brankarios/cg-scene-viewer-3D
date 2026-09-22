@@ -17,6 +17,7 @@
 #include "PickingFBO.h"
 #include "BoundingBox.h"
 #include "SceneIO.h"
+#include "PrimitiveGenerator.h"
 
 #include <iostream>
 #include <string>
@@ -61,6 +62,19 @@ static glm::vec4 g_normalColor(0.0f, 1.0f, 1.0f, 1.0f);
 static bool g_showBoundingBox = false;
 static bool g_depthTest = true;
 static bool g_cullFace = false;
+
+// ── Primitivas Parametrizables ──
+static int g_selectedPrimitive = 0; // 0: Cubo, 1: Pirámide, 2: Esfera, 3: Cilindro
+static float g_cubeSize = 1.0f;
+static float g_pyramidWidth = 1.0f;
+static float g_pyramidHeight = 1.2f;
+static float g_sphereRadius = 0.8f;
+static int g_sphereSectors = 32;
+static int g_sphereStacks = 16;
+static float g_cylinderRadius = 0.6f;
+static float g_cylinderHeight = 1.2f;
+static int g_cylinderSegments = 32;
+static glm::vec4 g_primitiveColor(0.8f, 0.8f, 0.8f, 1.0f);
 
 std::string openFileDialog() {
 #ifdef _WIN32
@@ -547,6 +561,50 @@ int main() {
             models.clear();
             g_selectedModel = -1;
             g_selectedMesh = -1;
+        }
+
+        // ── Creación de Objetos Simples Parametrizables ──
+        if (ImGui::CollapsingHeader("Crear Objeto Parametrizable", ImGuiTreeNodeFlags_DefaultOpen)) {
+            const char* primItems[] = { "Cubo", "Piramide", "Esfera", "Cilindro" };
+            ImGui::Combo("Tipo de Figura", &g_selectedPrimitive, primItems, IM_ARRAYSIZE(primItems));
+
+            if (g_selectedPrimitive == 0) { // Cubo
+                ImGui::SliderFloat("Tamano de Arista", &g_cubeSize, 0.1f, 5.0f, "%.2f");
+            } else if (g_selectedPrimitive == 1) { // Piramide
+                ImGui::SliderFloat("Ancho Base", &g_pyramidWidth, 0.1f, 5.0f, "%.2f");
+                ImGui::SliderFloat("Altura", &g_pyramidHeight, 0.1f, 5.0f, "%.2f");
+            } else if (g_selectedPrimitive == 2) { // Esfera
+                ImGui::SliderFloat("Radio", &g_sphereRadius, 0.1f, 3.0f, "%.2f");
+                ImGui::SliderInt("Sectores (Meridianos)", &g_sphereSectors, 6, 64);
+                ImGui::SliderInt("Pilas (Anillos)", &g_sphereStacks, 4, 32);
+            } else if (g_selectedPrimitive == 3) { // Cilindro
+                ImGui::SliderFloat("Radio", &g_cylinderRadius, 0.1f, 3.0f, "%.2f");
+                ImGui::SliderFloat("Altura", &g_cylinderHeight, 0.1f, 5.0f, "%.2f");
+                ImGui::SliderInt("Segmentos Radiales", &g_cylinderSegments, 6, 64);
+            }
+
+            ImGui::ColorEdit4("Color Inicial", &g_primitiveColor.x);
+
+            if (ImGui::Button("Generar y Cargar en Escena", ImVec2(278, 30))) {
+                std::unique_ptr<Model> newModel = nullptr;
+                if (g_selectedPrimitive == 0) {
+                    newModel = PrimitiveGenerator::createCube(g_cubeSize, g_primitiveColor);
+                } else if (g_selectedPrimitive == 1) {
+                    newModel = PrimitiveGenerator::createPyramid(g_pyramidWidth, g_pyramidHeight, g_primitiveColor);
+                } else if (g_selectedPrimitive == 2) {
+                    newModel = PrimitiveGenerator::createSphere(g_sphereRadius, g_sphereSectors, g_sphereStacks, g_primitiveColor);
+                } else if (g_selectedPrimitive == 3) {
+                    newModel = PrimitiveGenerator::createCylinder(g_cylinderRadius, g_cylinderHeight, g_cylinderSegments, g_primitiveColor);
+                }
+
+                if (newModel) {
+                    models.clear(); // La escena mantiene un único objeto activo
+                    models.push_back(std::move(newModel));
+                    g_selectedModel = 0;
+                    g_selectedMesh = -1;
+                    g_camera.reset(glm::vec3(0.0f), 3.5f);
+                }
+            }
         }
 
         // ── Gestión de Escena y Exportación ──

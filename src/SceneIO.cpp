@@ -1,4 +1,5 @@
 #include "SceneIO.h"
+#include "PrimitiveGenerator.h"
 #include <fstream>
 #include <sstream>
 #include <iostream>
@@ -56,6 +57,7 @@ bool SceneIO::saveScene(const std::string& filePath,
         const auto& model = models[i];
         out << "[MODEL " << i << "]\n";
         out << "filePath " << model->filePath << "\n";
+        out << "primitiveConfig " << model->primitiveConfig << "\n";
         out << "name " << model->name << "\n";
         out << "position " << model->position.x << " " << model->position.y << " " << model->position.z << "\n";
         out << "rotation " << model->rotation.x << " " << model->rotation.y << " " << model->rotation.z << "\n";
@@ -174,14 +176,57 @@ bool SceneIO::loadScene(const std::string& filePath,
                 }
                 
                 // Si la ruta original no existe directamente, intentar buscar relativa a la escena
-                if (!fs::exists(objPath)) {
-                    fs::path candidate = sceneDir / fs::path(objPath).filename();
-                    if (fs::exists(candidate)) {
-                        objPath = candidate.string();
+                if (!objPath.empty()) {
+                    if (!fs::exists(objPath)) {
+                        fs::path candidate = sceneDir / fs::path(objPath).filename();
+                        if (fs::exists(candidate)) {
+                            objPath = candidate.string();
+                        }
+                    }
+                    if (!curModel->loadFromFile(objPath)) {
+                        std::cerr << "Error al cargar modelo en la escena desde: " << objPath << std::endl;
                     }
                 }
-                if (!curModel->loadFromFile(objPath)) {
-                    std::cerr << "Error al cargar modelo en la escena desde: " << objPath << std::endl;
+            } else if (tag == "primitiveConfig") {
+                std::string primConfig;
+                std::getline(ss >> std::ws, primConfig);
+                while (!primConfig.empty() && (primConfig.back() == '\r' || primConfig.back() == ' ' || primConfig.back() == '\t')) {
+                    primConfig.pop_back();
+                }
+                curModel->primitiveConfig = primConfig;
+                if (!primConfig.empty()) {
+                    std::stringstream pss(primConfig);
+                    std::string pType;
+                    pss >> pType;
+                    if (pType == "cube") {
+                        float sz = 1.0f;
+                        pss >> sz;
+                        auto temp = PrimitiveGenerator::createCube(sz);
+                        curModel->meshes = std::move(temp->meshes);
+                        curModel->minBounds = temp->minBounds;
+                        curModel->maxBounds = temp->maxBounds;
+                    } else if (pType == "pyramid") {
+                        float w = 1.0f, h = 1.2f;
+                        pss >> w >> h;
+                        auto temp = PrimitiveGenerator::createPyramid(w, h);
+                        curModel->meshes = std::move(temp->meshes);
+                        curModel->minBounds = temp->minBounds;
+                        curModel->maxBounds = temp->maxBounds;
+                    } else if (pType == "sphere") {
+                        float r = 0.8f; int sec = 32, stk = 16;
+                        pss >> r >> sec >> stk;
+                        auto temp = PrimitiveGenerator::createSphere(r, sec, stk);
+                        curModel->meshes = std::move(temp->meshes);
+                        curModel->minBounds = temp->minBounds;
+                        curModel->maxBounds = temp->maxBounds;
+                    } else if (pType == "cylinder") {
+                        float r = 0.6f, h = 1.2f; int seg = 32;
+                        pss >> r >> h >> seg;
+                        auto temp = PrimitiveGenerator::createCylinder(r, h, seg);
+                        curModel->meshes = std::move(temp->meshes);
+                        curModel->minBounds = temp->minBounds;
+                        curModel->maxBounds = temp->maxBounds;
+                    }
                 }
             } else if (tag == "name") {
                 std::getline(ss >> std::ws, curModel->name);

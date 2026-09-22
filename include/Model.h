@@ -12,6 +12,7 @@ public:
     std::vector<Mesh> meshes;
     std::string name;
     std::string filePath;
+    std::string primitiveConfig; // Configuracion procedural si es una primitiva
 
     // Transformacion
     glm::vec3 position = glm::vec3(0.0f);

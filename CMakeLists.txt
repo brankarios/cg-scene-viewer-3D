@@ -89,6 +89,7 @@ add_executable(${PROJECT_NAME}
     src/PickingFBO.cpp
     src/BoundingBox.cpp
     src/SceneIO.cpp
+    src/PrimitiveGenerator.cpp
 )
 
 target_include_directories(${PROJECT_NAME} PRIVATE include)

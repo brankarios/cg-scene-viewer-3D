@@ -64,38 +64,74 @@ This project was built for the **Introduction to Computer Graphics** course at t
 
 ### 1. Homogeneous Coordinates & Affine Transformations
 3D positions are represented using 4D projective homogeneous vectors:
-$$\mathbf{P} = \begin{pmatrix} x & y & z & 1 \end{pmatrix}^T$$
+
+$$
+\mathbf{P} = \begin{pmatrix} x \\ y \\ z \\ 1 \end{pmatrix}
+$$
 
 Affine transformations are composed via matrix multiplication in column-major order:
-$$\mathbf{M} = \mathbf{T}(t_x, t_y, t_z) \cdot \mathbf{R}_z(\theta_z) \cdot \mathbf{R}_y(\theta_y) \cdot \mathbf{R}_x(\theta_x) \cdot \mathbf{S}(s_x, s_y, s_z)$$
+
+$$
+\mathbf{M} = \mathbf{T}(t_x, t_y, t_z) \cdot \mathbf{R}_z(\theta_z) \cdot \mathbf{R}_y(\theta_y) \cdot \mathbf{R}_x(\theta_x) \cdot \mathbf{S}(s_x, s_y, s_z)
+$$
 
 - **Translation Matrix**:
-  $$\mathbf{T}(\mathbf{t}) = \begin{pmatrix} 1 & 0 & 0 & t_x \\ 0 & 1 & 0 & t_y \\ 0 & 0 & 1 & t_z \\ 0 & 0 & 0 & 1 \end{pmatrix}$$
+
+  $$
+  \mathbf{T}(\mathbf{t}) = \begin{pmatrix} 1 & 0 & 0 & t_x \\ 0 & 1 & 0 & t_y \\ 0 & 0 & 1 & t_z \\ 0 & 0 & 0 & 1 \end{pmatrix}
+  $$
+
 - **Scaling Matrix**:
-  $$\mathbf{S}(\mathbf{s}) = \begin{pmatrix} s_x & 0 & 0 & 0 \\ 0 & s_y & 0 & 0 \\ 0 & 0 & s_z & 0 \\ 0 & 0 & 0 & 1 \end{pmatrix}$$
+
+  $$
+  \mathbf{S}(\mathbf{s}) = \begin{pmatrix} s_x & 0 & 0 & 0 \\ 0 & s_y & 0 & 0 \\ 0 & 0 & s_z & 0 \\ 0 & 0 & 0 & 1 \end{pmatrix}
+  $$
+
 - **Elementary Rotation Matrices** for axes $X, Y, Z$ using standard trigonometric formulations.
 
 The full vertex transformation pipeline maps vertices from Model Space to Clip Space:
-$$\mathbf{P}_{\text{clip}} = \mathbf{M}_{\text{projection}} \cdot \mathbf{M}_{\text{view}} \cdot \mathbf{M}_{\text{model}} \cdot \mathbf{M}_{\text{local}} \cdot \mathbf{P}_{\text{local}}$$
+
+$$
+\mathbf{P}_{\text{clip}} = \mathbf{M}_{\text{projection}} \cdot \mathbf{M}_{\text{view}} \cdot \mathbf{M}_{\text{model}} \cdot \mathbf{M}_{\text{local}} \cdot \mathbf{P}_{\text{local}}
+$$
 
 ---
 
 ### 2. Pivot-Centered Rotations
 To prevent objects and submeshes from revolving around the global origin $(0, 0, 0)$ when rotated, rotations are executed relative to their geometric centroid $\mathbf{c} \in \mathbb{R}^3$:
-$$\mathbf{M}_{\text{pivot}} = \mathbf{T}(\mathbf{c}) \cdot \mathbf{R}(\boldsymbol{\theta}) \cdot \mathbf{S}(\mathbf{s}) \cdot \mathbf{T}(-\mathbf{c})$$
+
+$$
+\mathbf{M}_{\text{pivot}} = \mathbf{T}(\mathbf{c}) \cdot \mathbf{R}(\boldsymbol{\theta}) \cdot \mathbf{S}(\mathbf{s}) \cdot \mathbf{T}(-\mathbf{c})
+$$
+
 This translates the geometry so that its center aligns with the origin, applies the angular rotation and scale, and translates it back.
 
 ---
 
 ### 3. Object Normalization & AABB
 Upon importation, each model's Axis-Aligned Bounding Box (AABB) is calculated by finding the coordinate extrema:
-$$\mathbf{p}_{\min} = \min_{i}(\mathbf{v}_i), \quad \mathbf{p}_{\max} = \max_{i}(\mathbf{v}_i)$$
 
-The model is centered and normalized to fit within the $[-1, 1]$ cube:
-$$\mathbf{c} = \frac{\mathbf{p}_{\min} + \mathbf{p}_{\max}}{2}$$
-$$d_{\max} = \max(p_{\max, x} - p_{\min, x},\; p_{\max, y} - p_{\min, y},\; p_{\max, z} - p_{\min, z})$$
-$$s = \frac{2.0}{d_{\max}}$$
-$$\mathbf{v}'_i = (\mathbf{v}_i - \mathbf{c}) \cdot s$$
+$$
+\mathbf{p}_{\min} = \min_{i}(\mathbf{v}_i), \quad \mathbf{p}_{\max} = \max_{i}(\mathbf{v}_i)
+$$
+
+The model is centered and normalized to fit within the $[-1, 1]^3$ cube:
+
+$$
+\mathbf{c} = \frac{\mathbf{p}_{\min} + \mathbf{p}_{\max}}{2}
+$$
+
+$$
+d_{\max} = \max(p_{\max, x} - p_{\min, x},\; p_{\max, y} - p_{\min, y},\; p_{\max, z} - p_{\min, z})
+$$
+
+$$
+s = \frac{2.0}{d_{\max}}
+$$
+
+$$
+\mathbf{v}'_i = (\mathbf{v}_i - \mathbf{c}) \cdot s
+$$
 
 ---
 
@@ -103,11 +139,24 @@ $$\mathbf{v}'_i = (\mathbf{v}_i - \mathbf{c}) \cdot s$$
 When an imported model does not supply vertex normals, smooth normals are approximated by weighting the normals of all adjacent faces sharing a vertex.
 
 For each triangle defined by vertices $(\mathbf{v}_0, \mathbf{v}_1, \mathbf{v}_2)$:
-$$\mathbf{e}_1 = \mathbf{v}_1 - \mathbf{v}_0, \quad \mathbf{e}_2 = \mathbf{v}_2 - \mathbf{v}_0$$
-$$\mathbf{N}_{\text{face}} = \mathbf{e}_1 \times \mathbf{e}_2$$
+
+$$
+\mathbf{e}_1 = \mathbf{v}_1 - \mathbf{v}_0, \quad \mathbf{e}_2 = \mathbf{v}_2 - \mathbf{v}_0
+$$
+
+$$
+\mathbf{N}_{\text{face}} = \mathbf{e}_1 \times \mathbf{e}_2
+$$
+
 The face normal magnitude $\|\mathbf{N}_{\text{face}}\|$ is proportional to twice the triangle's surface area. By summing $\mathbf{N}_{\text{face}}$ directly into each vertex's accumulator, larger triangles contribute proportionally more weight:
-$$\mathbf{N}_{\text{accum}}(\mathbf{v}_i) = \sum_{k \in \text{Faces}(v_i)} \mathbf{N}_{\text{face}, k}$$
-$$\hat{\mathbf{N}}(\mathbf{v}_i) = \frac{\mathbf{N}_{\text{accum}}(\mathbf{v}_i)}{\|\mathbf{N}_{\text{accum}}(\mathbf{v}_i)\|}$$
+
+$$
+\mathbf{N}_{\text{accum}}(\mathbf{v}_i) = \sum_{k \in \text{Faces}(v_i)} \mathbf{N}_{\text{face}, k}
+$$
+
+$$
+\hat{\mathbf{N}}(\mathbf{v}_i) = \frac{\mathbf{N}_{\text{accum}}(\mathbf{v}_i)}{\|\mathbf{N}_{\text{accum}}(\mathbf{v}_i)\|}
+$$
 
 ---
 
@@ -115,12 +164,22 @@ $$\hat{\mathbf{N}}(\mathbf{v}_i) = \frac{\mathbf{N}_{\text{accum}}(\mathbf{v}_i)
 
 #### UV Sphere
 Constructed using spherical coordinates with radius $r$, longitudinal sectors $j \in [0, N_s]$, and latitudinal stacks $i \in [0, N_t]$:
-$$\theta = \frac{2\pi j}{N_s}, \quad \phi = \frac{\pi}{2} - \frac{\pi i}{N_t}$$
-$$\mathbf{p}(\theta, \phi) = \begin{pmatrix} r \cos \phi \cos \theta \\ r \sin \phi \\ r \cos \phi \sin \theta \end{pmatrix}, \quad \hat{\mathbf{n}}(\theta, \phi) = \frac{\mathbf{p}(\theta, \phi)}{r}$$
+
+$$
+\theta = \frac{2\pi j}{N_s}, \quad \phi = \frac{\pi}{2} - \frac{\pi i}{N_t}
+$$
+
+$$
+\mathbf{p}(\theta, \phi) = \begin{pmatrix} r \cos \phi \cos \theta \\ r \sin \phi \\ r \cos \phi \sin \theta \end{pmatrix}, \quad \hat{\mathbf{n}}(\theta, \phi) = \frac{\mathbf{p}(\theta, \phi)}{r}
+$$
 
 #### Cylinder
 Constructed using polar cylindrical coordinates with radius $r$, height $h$, and radial segments $j \in [0, N_s]$:
-$$\theta = \frac{2\pi j}{N_s}$$
+
+$$
+\theta = \frac{2\pi j}{N_s}
+$$
+
 - **Lateral Surface**: Vertices at $(r \cos \theta, \pm \frac{h}{2}, r \sin \theta)$ with radial normals $\hat{\mathbf{n}} = (\cos \theta, 0, \sin \theta)$.
 - **End Caps**: Planar triangle fans at $y = \pm \frac{h}{2}$ with axial normals $(0, \pm 1, 0)$.
 
@@ -133,17 +192,23 @@ Modeled face-by-face with duplicated vertices per facet to ensure sharp edges an
 Object selection utilizes GPU-accelerated **Color Picking**:
 1. An offscreen Framebuffer Object (FBO) is bound with a dedicated `GL_RGBA8` texture and a 24-bit depth renderbuffer (`GL_DEPTH_COMPONENT24`).
 2. An integer identifier is packed into the 24-bit RGB channels:
-   $$R = \text{ID} \ \& \ \text{0xFF}, \quad G = (\text{ID} \gg 8) \ \& \ \text{0xFF}, \quad B = (\text{ID} \gg 16) \ \& \ \text{0xFF}$$
+   - **Red**: `R = ID & 0xFF`
+   - **Green**: `G = (ID >> 8) & 0xFF`
+   - **Blue**: `B = (ID >> 16) & 0xFF`
 3. The scene is drawn using an unlit flat shader (`picking.frag`).
 4. Upon mouse click at screen coordinate $(x, y)$, `glReadPixels` samples the exact pixel at $(x, H - 1 - y)$:
-   $$\text{ID} = R + (G \ll 8) + (B \ll 16)$$
+   - **Decoded ID**: `ID = R | (G << 8) | (B << 16)`
+   
    An ID of `0` denotes background (no hit).
 
 ---
 
 ### 7. Lighting & Shading
 Surface lighting employs the **Lambertian Diffuse Reflection Model**:
-$$I = I_{\text{ambient}} \cdot K_a + I_{\text{diffuse}} \cdot K_d \cdot \max(\hat{\mathbf{N}} \cdot \hat{\mathbf{L}}, 0.0)$$
+
+$$
+I = I_{\text{ambient}} \cdot K_a + I_{\text{diffuse}} \cdot K_d \cdot \max(\hat{\mathbf{N}} \cdot \hat{\mathbf{L}}, 0.0)
+$$
 
 Where:
 - $\hat{\mathbf{N}}$ is the interpolated surface unit normal.
@@ -156,7 +221,11 @@ Where:
 ### 8. Hidden Surface Removal (Z-Buffer & Back-Face Culling)
 - **Z-Buffer Algorithm**: During rasterization, fragment depth $z \in [0, 1]$ is tested against the depth buffer. Fragments with $z < z_{\text{buffer}}[x, y]$ pass the test and overwrite the pixel color and depth value.
 - **Back-Face Culling**: Polygons whose surface normal points away from the camera are culled before rasterization. Given viewing direction $\vec{D}$ and face normal $\vec{N}$:
-  $$\vec{D} \cdot \vec{N} > 0 \implies \text{Cull face}$$
+
+  $$
+  \vec{D} \cdot \vec{N} > 0 \implies \text{Cull Face}
+  $$
+
   In OpenGL Core Profile, this is determined via the projected 2D winding order (CCW = front-facing, CW = back-facing).
 
 ---
@@ -294,8 +363,3 @@ renderOptions <depthTest> <cullFace> <wireframe> <normals> <vertices> <bbox>
 model <name> <primitiveConfig> <filePath> <posX> <posY> <posZ> <rotX> <rotY> <rotZ> <scaleX> <scaleY> <scaleZ> <colR> <colG> <colB> <colA>
 submesh <name> <posX> <posY> <posZ> <rotX> <rotY> <rotZ> <scaleX> <scaleY> <scaleZ> <colR> <colG> <colB> <colA>
 ```
-
----
-
-## License & Academic Integrity
-Developed for academic purposes under the **Introducción a la Computación Gráfica** curriculum at **Universidad Central de Venezuela (UCV)**.

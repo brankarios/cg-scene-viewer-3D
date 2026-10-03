@@ -25,6 +25,7 @@
 #include <map>
 #include <memory>
 #include <algorithm>
+#include <cmath>
 
 enum class InteractionMode {
     Rotate,     
@@ -526,13 +527,20 @@ int main() {
                             curMesh.rotation.x += mouseDeltaY * 0.5f;
                         }
                     } else if (g_mode == InteractionMode::Translate) {
-                        float speed = 0.0025f * g_camera.distance;
-                        glm::mat4 modelRot = glm::rotate(glm::mat4(1.0f), glm::radians(model->rotation.z), glm::vec3(0, 0, 1)) *
-                                             glm::rotate(glm::mat4(1.0f), glm::radians(model->rotation.y), glm::vec3(0, 1, 0)) *
-                                             glm::rotate(glm::mat4(1.0f), glm::radians(model->rotation.x), glm::vec3(1, 0, 0));
-                        glm::mat3 invModelRot = glm::inverse(glm::mat3(modelRot));
-                        glm::vec3 worldDelta = g_camera.right * (mouseDeltaX * speed) - g_camera.up * (mouseDeltaY * speed);
-                        curMesh.position += invModelRot * worldDelta;
+                        int win_w, win_h;
+                        glfwGetWindowSize(window, &win_w, &win_h);
+                        float screenH = (win_h > 0) ? static_cast<float>(win_h) : static_cast<float>(display_h);
+
+                        glm::mat4 modelMatrix = model->getModelMatrix();
+                        glm::vec3 submeshWorldPos = glm::vec3(modelMatrix * glm::vec4(curMesh.position, 1.0f));
+                        glm::vec3 toSubmesh = submeshWorldPos - g_camera.position;
+                        float depth = std::max(0.1f, glm::dot(toSubmesh, g_camera.front));
+                        float visibleHeight = 2.0f * depth * std::tan(glm::radians(g_camera.zoom) * 0.5f);
+                        float worldPerPixel = visibleHeight / screenH;
+
+                        glm::vec3 worldDelta = g_camera.right * (mouseDeltaX * worldPerPixel) - g_camera.up * (mouseDeltaY * worldPerPixel);
+                        glm::mat3 invModelTransform = glm::inverse(glm::mat3(modelMatrix));
+                        curMesh.position += invModelTransform * worldDelta;
                     } else if (g_mode == InteractionMode::Scale) {
                         float factor = 1.0f + (mouseDeltaX - mouseDeltaY) * 0.008f;
                         curMesh.scale *= factor;
@@ -547,8 +555,16 @@ int main() {
                             model->rotation.x += mouseDeltaY * 0.5f;
                         }
                     } else if (g_mode == InteractionMode::Translate) {
-                        float speed = 0.0025f * g_camera.distance;
-                        model->position += g_camera.right * (mouseDeltaX * speed) - g_camera.up * (mouseDeltaY * speed);
+                        int win_w, win_h;
+                        glfwGetWindowSize(window, &win_w, &win_h);
+                        float screenH = (win_h > 0) ? static_cast<float>(win_h) : static_cast<float>(display_h);
+
+                        glm::vec3 toObject = model->position - g_camera.position;
+                        float depth = std::max(0.1f, glm::dot(toObject, g_camera.front));
+                        float visibleHeight = 2.0f * depth * std::tan(glm::radians(g_camera.zoom) * 0.5f);
+                        float worldPerPixel = visibleHeight / screenH;
+
+                        model->position += g_camera.right * (mouseDeltaX * worldPerPixel) - g_camera.up * (mouseDeltaY * worldPerPixel);
                     } else if (g_mode == InteractionMode::Scale) {
                         float factor = 1.0f + (mouseDeltaX - mouseDeltaY) * 0.008f;
                         model->scale *= factor;

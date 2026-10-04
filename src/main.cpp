@@ -61,6 +61,9 @@ static bool g_showNormals = false;
 static float g_normalLength = 0.06f;
 static glm::vec4 g_normalColor(0.0f, 1.0f, 1.0f, 1.0f);
 static bool g_showBoundingBox = false;
+static bool g_highlightSelectedMesh = true;
+static glm::vec4 g_submeshHighlightColor(1.0f, 0.75f, 0.1f, 1.0f);
+static float g_outlineThickness = 0.035f;
 static bool g_depthTest = true;
 static bool g_cullFace = false;
 
@@ -998,6 +1001,14 @@ int main() {
         if (ImGui::CollapsingHeader("Modos de Visualizacion", ImGuiTreeNodeFlags_DefaultOpen)) {
             ImGui::Checkbox("Modo Wireframe (Alambrico)", &g_wireframe);
 
+            ImGui::Checkbox("Resaltar Borde de Submalla Activa", &g_highlightSelectedMesh);
+            if (g_highlightSelectedMesh) {
+                ImGui::Indent(20.0f);
+                ImGui::ColorEdit3("Color Borde", &g_submeshHighlightColor.x);
+                ImGui::SliderFloat("Grosor Borde", &g_outlineThickness, 0.01f, 0.1f, "%.3f");
+                ImGui::Unindent(20.0f);
+            }
+
             ImGui::Checkbox("Visualizar Vertices", &g_showVertices);
             if (g_showVertices) {
                 ImGui::Indent(20.0f);
@@ -1125,6 +1136,66 @@ int main() {
         }
 
         glPolygonMode(GL_FRONT_AND_BACK, GL_FILL);
+
+        // Resaltado de silueta/borde de la submalla seleccionada (Técnica Inverted Hull)
+        if (g_highlightSelectedMesh && !models.empty() && g_selectedModel >= 0 && g_selectedModel < static_cast<int>(models.size())) {
+            auto& selModel = models[g_selectedModel];
+            bool isLocalSubmesh = (g_specificity == SelectionSpecificity::Local &&
+                                   g_selectedMesh >= 0 &&
+                                   g_selectedMesh < static_cast<int>(selModel->meshes.size()));
+
+            if (isLocalSubmesh) {
+                flatShader.use();
+                flatShader.setMat4("view", view);
+                flatShader.setMat4("projection", projection);
+
+                glm::vec4 highlightColor = g_submeshHighlightColor;
+                if (g_isLeftDragging) {
+                    highlightColor = glm::vec4(1.0f, 0.45f, 0.0f, 1.0f);
+                }
+                flatShader.setVec4("flatColor", highlightColor);
+
+                glm::mat4 modelMat = selModel->getModelMatrix();
+                auto& curMesh = selModel->meshes[g_selectedMesh];
+
+                // Matriz de expansión uniforme alrededor del centroide de la submalla
+                glm::vec3 centroid = (curMesh.minBounds + curMesh.maxBounds) * 0.5f;
+                glm::vec3 size = curMesh.maxBounds - curMesh.minBounds;
+                glm::vec3 scaleVec(
+                    size.x > 0.001f ? 1.0f + (g_outlineThickness / size.x) : 1.04f,
+                    size.y > 0.001f ? 1.0f + (g_outlineThickness / size.y) : 1.04f,
+                    size.z > 0.001f ? 1.0f + (g_outlineThickness / size.z) : 1.04f
+                );
+                scaleVec = glm::clamp(scaleVec, glm::vec3(1.01f), glm::vec3(1.15f));
+
+                glm::mat4 expandMat = glm::translate(glm::mat4(1.0f), centroid)
+                                    * glm::scale(glm::mat4(1.0f), scaleVec)
+                                    * glm::translate(glm::mat4(1.0f), -centroid);
+
+                flatShader.setMat4("model", modelMat * curMesh.getLocalModelMatrix() * expandMat);
+
+                
+                glEnable(GL_DEPTH_TEST);
+                glEnable(GL_CULL_FACE);
+                glCullFace(GL_FRONT);
+                glPolygonMode(GL_FRONT_AND_BACK, GL_FILL);
+                glDepthMask(GL_FALSE);
+
+                curMesh.draw();
+
+                glDepthMask(GL_TRUE);
+
+                // Restaurar estado de culling y depth test
+                if (!g_cullFace) {
+                    glDisable(GL_CULL_FACE);
+                } else {
+                    glCullFace(GL_BACK);
+                }
+                if (!g_depthTest) {
+                    glDisable(GL_DEPTH_TEST);
+                }
+            }
+        }
 
         // Vértices
         if (g_showVertices && !models.empty()) {
